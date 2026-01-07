@@ -1,0 +1,30 @@
+# ملفات النظام
+.DS_Store
+Thumbs.db
+
+# ملفات Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ملفات البيئة والإعدادات
+.env
+.env.local
+.env.*.local
+
+# ⚠️ ملف الإعدادات النهائي - لا تنشره أبداً!
+config.js
+
+# ملفات البناء
+/dist
+/build
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# نظام التشغيل
+*.log

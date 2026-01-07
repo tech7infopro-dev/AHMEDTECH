@@ -3,7 +3,6 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "outputDirectory": "public",
-  "framework": "null",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
@@ -33,4 +32,5 @@
     "PASSWORD_MIN_LENGTH": "8"
   }
 }
+
 

@@ -46,7 +46,7 @@ window.CONFIG = {
     // 👥 المستخدمون الافتراضيون
     DEFAULT_USERS: {
         admin: {
-            username: "${process.env.ADMIN_USERNAME || 'Ahmed'}",
+            username: "${process.env.ADMIN_USERNAME || 'PROTECH'}",
             password: "${process.env.ADMIN_PASSWORD || 'ah85ME19!/ou?06D16@'}",
             email: "${process.env.ADMIN_EMAIL || 'tech7infopro@gmail.com'}",
             role: "admin"

@@ -36,7 +36,7 @@ window.CONFIG = {
         version: "1.2.2",
         releaseDate: "2025-12-19",
         company: "AHMEDTECH",
-        author: "Ahmed"
+        author: "TEST"
     },
     SECURITY: {
         maxLoginAttempts: 5,
@@ -51,3 +51,4 @@ window.CONFIG = {
 };
 
 console.log('⚠️ إعدادات تجريبية - استبدل القيم قبل النشر');
+

@@ -3,7 +3,7 @@
   "devCommand": "npm run dev",
   "installCommand": "npm install",
   "outputDirectory": ".",
-  "framework": "static",
+  "framework": ".",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],

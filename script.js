@@ -149,8 +149,7 @@ if (!CONFIG) {
 }
 
 // 🔒 تحذير إذا كانت المفاتيح لا تزال مؤقتة
-if (CONFIG.ENCRYPTION.baseKey.includes('LOCAL_DEV') || 
-    CONFIG.ENCRYPTION.baseKey.includes('TEMPORARY')) {
+if (CONFIG.ENCRYPTION.baseKey.includes('LOCAL_DEV') || CONFIG.ENCRYPTION.baseKey.includes('TEMPORARY')) {
     console.warn('⚠️ استخدام مفاتيح تطوير محلية - غير آمن للإنتاج');
     console.warn('🔒 تأكد من تعيين متغيرات البيئة في Vercel');
 }
@@ -162,6 +161,7 @@ let auth = null;
 let currentUser = null;
 let autoSyncInterval = null;
 let isLoggingIn = false; // إضافة: منع تسجيل الدخول المزدوج
+
 // ============================================
 // نظام منع النقر المتعدد
 // ============================================
@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', function() {
     ClickProtection.protectForm('loginForm');
     ClickProtection.protectForm('registerForm');
 });
+
 // ============================================
 // 🔥 نظام تحميل البيانات من Firebase (نسخة متوازنة)
 // ============================================
@@ -267,7 +268,6 @@ async function loadFromFirebaseWithTimestamp(collectionName) {
         
         if (snapshot.empty) return null;
         
-        const latestDoc = snapshot.docs[0];
         const data = await db.collection(collectionName).get();
         
         const items = data.docs.map(doc => ({
@@ -277,7 +277,7 @@ async function loadFromFirebaseWithTimestamp(collectionName) {
         
         return {
             items: items,
-            timestamp: latestDoc.data().lastUpdated || new Date().toISOString()
+            timestamp: snapshot.docs[0].data().lastUpdated || new Date().toISOString()
         };
     } catch (error) {
         console.error(`❌ خطأ في تحميل ${collectionName}:`, error);
@@ -368,6 +368,7 @@ function addRefreshDataButton() {
         syncButtonsContainer.appendChild(refreshBtn);
     }, 3000);
 }
+
 // التحقق من تحديث المستخدمين
 const currentVersion = "1.2.2";
 const storedVersion = localStorage.getItem("app_version");
@@ -2190,24 +2191,28 @@ ${firebaseInitialized ? '✅ النظام يعمل بشكل ممتاز!' : '⚠�
     },
     
     updateVersionBadges: function() {
-        document.querySelectorAll(".version-badge").forEach((e => {
-            e.textContent = `v${this.currentVersion}`
-        }));
+        document.querySelectorAll(".version-badge").forEach((element) => {
+            element.textContent = `v${this.currentVersion}`;
+        });
     },
+    
     getVersionInfo: function() {
         return {
             version: this.currentVersion,
             date: this.releaseDate,
             changes: this.changes
-        }
+        };
     },
+    
     checkForUpdates: function() {
-        return console.log("🔍 Checking for updates..."), {
-            updateAvailable: !1,
+        console.log("🔍 Checking for updates...");
+        return {
+            updateAvailable: false,
             currentVersion: this.currentVersion,
             message: "You are using the latest version"
-        }
+        };
     },
+    
     initEncryptionSystem: function() {
         console.log("🔐 Initializing dynamic encryption system...");
         dynamicEncryptionSystem.init();
@@ -2256,7 +2261,7 @@ const dynamicEncryptionSystem = {
             this.currentKey = dynamicKey;
             this.keyHistory.unshift({
                 key: dynamicKey,
-                timestamp: (new Date).toISOString(),
+                timestamp: (new Date()).toISOString(),
                 type: "initial",
                 userAgent: navigator.userAgent.substring(0, 50),
                 hash: CryptoJS.MD5(dynamicKey).toString().substring(0, 16)
@@ -2284,7 +2289,7 @@ const dynamicEncryptionSystem = {
         const newKey = this.generateDynamicKey("AHMEDTECH_ROTATED_KEY");
         this.keyHistory.unshift({
             key: newKey,
-            timestamp: (new Date).toISOString(),
+            timestamp: (new Date()).toISOString(),
             type: "rotated",
             previousKey: this.currentKey,
             hash: CryptoJS.MD5(newKey).toString().substring(0, 16)
@@ -2298,7 +2303,7 @@ const dynamicEncryptionSystem = {
         
         this.saveKeys();
         securityLog.add("ENCRYPTION_KEY_ROTATED", {
-            timestamp: (new Date).toISOString()
+            timestamp: (new Date()).toISOString()
         });
         
         console.log("🔄 Encryption key rotated");
@@ -2352,7 +2357,7 @@ const dynamicEncryptionSystem = {
     
     backupKeys: function() {
         const backup = {
-            timestamp: (new Date).toISOString(),
+            timestamp: (new Date()).toISOString(),
             version: versionSystem.currentVersion,
             keys: this.keyHistory.map(k => ({
                 hash: k.hash,
@@ -2373,7 +2378,7 @@ const dynamicEncryptionSystem = {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `encryption-keys-backup-${(new Date).toISOString().split("T")[0]}.json`;
+        a.download = `encryption-keys-backup-${(new Date()).toISOString().split("T")[0]}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -2392,28 +2397,28 @@ const dynamicEncryptionSystem = {
             keyHistoryCount: this.keyHistory.length,
             lastRotation: this.keyHistory[0]?.timestamp,
             autoRotationEnabled: true
-        }
+        };
     }
 };
 
 const encryption = {
-    encrypt: function(e) {
+    encrypt: function(text) {
         try {
             const key = dynamicEncryptionSystem.getCurrentKey();
-            return CryptoJS.AES.encrypt(e, key).toString();
-        } catch (t) {
-            console.error("Encryption error:", t);
-            return e;
+            return CryptoJS.AES.encrypt(text, key).toString();
+        } catch (error) {
+            console.error("Encryption error:", error);
+            return text;
         }
     },
     
-    decrypt: function(e) {
+    decrypt: function(ciphertext) {
         try {
             const key = dynamicEncryptionSystem.getCurrentKey();
-            return CryptoJS.AES.decrypt(e, key).toString(CryptoJS.enc.Utf8);
-        } catch (t) {
-            console.error("Decryption error:", t);
-            return e;
+            return CryptoJS.AES.decrypt(ciphertext, key).toString(CryptoJS.enc.Utf8);
+        } catch (error) {
+            console.error("Decryption error:", error);
+            return ciphertext;
         }
     },
     
@@ -2433,8 +2438,8 @@ const encryption = {
     },
     
     generateToken: function() {
-        const e = CryptoJS.lib.WordArray.random(32);
-        return CryptoJS.SHA256(e.toString()).toString();
+        const random = CryptoJS.lib.WordArray.random(32);
+        return CryptoJS.SHA256(random.toString()).toString();
     },
     
     rotateEncryptionKey: function() {
@@ -2462,20 +2467,22 @@ const encryption = {
 
 const backupSystem = {
     init: function() {
-        const e = document.getElementById("createBackupBtn");
-        e && e.addEventListener("click", (() => {
-            this.createBackup()
-        })), this.loadBackupStatus()
+        const createBackupBtn = document.getElementById("createBackupBtn");
+        createBackupBtn && createBackupBtn.addEventListener("click", () => {
+            this.createBackup();
+        });
+        this.loadBackupStatus();
         
         const keyBackupBtn = document.getElementById("backupEncryptionKeysBtn");
-        keyBackupBtn && keyBackupBtn.addEventListener("click", (() => {
-            this.backupEncryptionKeys()
-        }));
+        keyBackupBtn && keyBackupBtn.addEventListener("click", () => {
+            this.backupEncryptionKeys();
+        });
     },
+    
     createBackup: function() {
-        const e = {
+        const backupData = {
             version: versionSystem.currentVersion,
-            timestamp: (new Date).toISOString(),
+            timestamp: (new Date()).toISOString(),
             users: users,
             freemacsPackages: freemacsSystem.packages,
             serverxtreamServers: serverxtreamSystem.servers,
@@ -2484,7 +2491,7 @@ const backupSystem = {
             systemInfo: {
                 userAgent: navigator.userAgent,
                 screenResolution: `${screen.width}x${screen.height}`,
-                timezone: (new Date).getTimezoneOffset(),
+                timezone: (new Date()).getTimezoneOffset(),
                 language: navigator.language
             },
             encryptionKeyInfo: dynamicEncryptionSystem.getKeyInfo(),
@@ -2493,21 +2500,21 @@ const backupSystem = {
             cookieInfo: SECURE_COOKIE_SYSTEM.getCookieStatus(),
             injectionProtection: "active"
         };
-        const t = JSON.stringify(e, null, 2);
-        const s = new Blob([t], {
-            type: "application/json"
-        });
-        const n = URL.createObjectURL(s);
+        
+        const jsonData = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonData], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = n;
-        a.download = `ahmedtech-backup-${(new Date).toISOString().split("T")[0]}.json`;
+        a.href = url;
+        a.download = `ahmedtech-backup-${(new Date()).toISOString().split("T")[0]}.json`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(n);
-        const o = {
-            timestamp: (new Date).toISOString(),
-            fileSize: (t.length / 1024).toFixed(2) + " KB",
+        URL.revokeObjectURL(url);
+        
+        const backupInfo = {
+            timestamp: (new Date()).toISOString(),
+            fileSize: (jsonData.length / 1024).toFixed(2) + " KB",
             items: {
                 users: users.length,
                 packages: freemacsSystem.packages.length,
@@ -2515,27 +2522,31 @@ const backupSystem = {
                 videos: tutorialVideosSystem.videos.length
             }
         };
-        localStorage.setItem("last_backup", JSON.stringify(o));
-        this.updateBackupStatus(o);
+        
+        localStorage.setItem("last_backup", JSON.stringify(backupInfo));
+        this.updateBackupStatus(backupInfo);
         this.showSuccessMessage("Backup created successfully!");
-        securityLog.add("BACKUP_CREATED", o)
+        securityLog.add("BACKUP_CREATED", backupInfo);
     },
+    
     loadBackupStatus: function() {
-        const e = localStorage.getItem("last_backup");
-        if (e) {
-            const t = JSON.parse(e);
-            this.updateBackupStatus(t)
+        const backupInfo = localStorage.getItem("last_backup");
+        if (backupInfo) {
+            const data = JSON.parse(backupInfo);
+            this.updateBackupStatus(data);
         }
     },
-    updateBackupStatus: function(e) {
-        const t = document.getElementById("backupStatus");
-        const s = document.getElementById("lastBackupTime");
-        if (t && s) {
-            const n = new Date(e.timestamp);
-            s.textContent = n.toLocaleDateString() + " " + n.toLocaleTimeString();
-            t.style.display = "block"
+    
+    updateBackupStatus: function(backupInfo) {
+        const backupStatus = document.getElementById("backupStatus");
+        const lastBackupTime = document.getElementById("lastBackupTime");
+        if (backupStatus && lastBackupTime) {
+            const date = new Date(backupInfo.timestamp);
+            lastBackupTime.textContent = date.toLocaleDateString() + " " + date.toLocaleTimeString();
+            backupStatus.style.display = "block";
         }
     },
+    
     backupEncryptionKeys: function() {
         const backup = dynamicEncryptionSystem.backupKeys();
         this.showSuccessMessage("Encryption keys backup created successfully!");
@@ -2543,67 +2554,89 @@ const backupSystem = {
             keyCount: backup.keys.length
         });
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام إدارة الفيديوهات التعليمية
+// ============================================
 
 const tutorialVideosSystem = {
     currentUserRole: "user",
     videos: [],
     currentEditingIndex: null,
-    isEditing: !1,
+    isEditing: false,
+    
     init: function() {
         this.loadVideos();
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     loadVideos: function() {
         try {
-            const e = localStorage.getItem("tutorial_videos");
-            e ? this.videos = JSON.parse(e) : (this.videos = [], this.saveVideos())
-        } catch (e) {
-            console.error("Error loading videos:", e);
-            this.videos = []
+            const videosData = localStorage.getItem("tutorial_videos");
+            this.videos = videosData ? JSON.parse(videosData) : [];
+            this.saveVideos();
+        } catch (error) {
+            console.error("Error loading videos:", error);
+            this.videos = [];
         }
     },
+    
     saveVideos: function() {
         try {
             localStorage.setItem("tutorial_videos", JSON.stringify(this.videos));
             if (firebaseInitialized && db) {
                 syncToFirebase('tutorial_videos', this.videos);
             }
-        } catch (e) {
-            console.error("Error saving videos:", e)
+        } catch (error) {
+            console.error("Error saving videos:", error);
         }
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeTutorialVideos").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("tutorialVideosModal").addEventListener("click", (e => {
-            e.target === document.getElementById("tutorialVideosModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("tutorialVideosModal").style.display && this.closeModal()
-        }));
-        document.getElementById("addVideoBtn").addEventListener("click", (() => {
-            this.openAddEditVideoModal()
-        }));
-        document.getElementById("closeAddEditVideo").addEventListener("click", (() => {
-            this.closeAddEditVideoModal()
-        }));
-        document.getElementById("addEditVideoModal").addEventListener("click", (e => {
-            e.target === document.getElementById("addEditVideoModal") && this.closeAddEditVideoModal()
-        }));
-        document.getElementById("cancelAddEditVideo").addEventListener("click", (() => {
-            this.closeAddEditVideoModal()
-        }));
-        document.getElementById("addEditVideoForm").addEventListener("submit", (e => {
+        const closeButton = document.getElementById("closeTutorialVideos");
+        const modal = document.getElementById("tutorialVideosModal");
+        const addVideoBtn = document.getElementById("addVideoBtn");
+        const closeAddEditBtn = document.getElementById("closeAddEditVideo");
+        const addEditModal = document.getElementById("addEditVideoModal");
+        const cancelBtn = document.getElementById("cancelAddEditVideo");
+        const form = document.getElementById("addEditVideoForm");
+        const closePlayerBtn = document.getElementById("closeVideoPlayer");
+        const playerModal = document.getElementById("videoPlayerModal");
+        const closeDeleteBtn = document.getElementById("closeDeleteVideoConfirm");
+        const deleteModal = document.getElementById("deleteVideoConfirmModal");
+        const cancelDeleteBtn = document.getElementById("cancelDeleteVideo");
+        const confirmDeleteBtn = document.getElementById("confirmDeleteVideo");
+        
+        closeButton && closeButton.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
+        
+        addVideoBtn && addVideoBtn.addEventListener("click", () => this.openAddEditVideoModal());
+        closeAddEditBtn && closeAddEditBtn.addEventListener("click", () => this.closeAddEditVideoModal());
+        addEditModal && addEditModal.addEventListener("click", (e) => {
+            e.target === addEditModal && this.closeAddEditVideoModal();
+        });
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeAddEditVideoModal());
+        form && form.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -2611,169 +2644,237 @@ const tutorialVideosSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }));
-        document.getElementById("closeVideoPlayer").addEventListener("click", (() => {
-            this.closeVideoPlayer()
-        }));
-        document.getElementById("videoPlayerModal").addEventListener("click", (e => {
-            e.target === document.getElementById("videoPlayerModal") && this.closeVideoPlayer()
-        }));
-        document.getElementById("closeDeleteVideoConfirm").addEventListener("click", (() => {
-            this.closeDeleteVideoModal()
-        }));
-        document.getElementById("deleteVideoConfirmModal").addEventListener("click", (e => {
-            e.target === document.getElementById("deleteVideoConfirmModal") && this.closeDeleteVideoModal()
-        }));
-        document.getElementById("cancelDeleteVideo").addEventListener("click", (() => {
-            this.closeDeleteVideoModal()
-        }));
-        document.getElementById("confirmDeleteVideo").addEventListener("click", (() => {
-            this.confirmDeleteVideo()
-        }))
+        });
+        
+        closePlayerBtn && closePlayerBtn.addEventListener("click", () => this.closeVideoPlayer());
+        playerModal && playerModal.addEventListener("click", (e) => {
+            e.target === playerModal && this.closeVideoPlayer();
+        });
+        
+        closeDeleteBtn && closeDeleteBtn.addEventListener("click", () => this.closeDeleteVideoModal());
+        deleteModal && deleteModal.addEventListener("click", (e) => {
+            e.target === deleteModal && this.closeDeleteVideoModal();
+        });
+        cancelDeleteBtn && cancelDeleteBtn.addEventListener("click", () => this.closeDeleteVideoModal());
+        confirmDeleteBtn && confirmDeleteBtn.addEventListener("click", () => this.confirmDeleteVideo());
     },
-    openModal: function(e) {
-        this.currentUserRole = e;
-        document.getElementById("tutorialVideosModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
+    
+    openModal: function(userRole) {
+        this.currentUserRole = userRole;
+        const modal = document.getElementById("tutorialVideosModal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+        }
         this.renderVideos();
-        securityLog.add("TUTORIAL_VIDEOS_MODAL_OPENED", {
-            userRole: e
-        })
+        securityLog.add("TUTORIAL_VIDEOS_MODAL_OPENED", { userRole: userRole });
     },
+    
     closeModal: function() {
-        document.getElementById("tutorialVideosModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("TUTORIAL_VIDEOS_MODAL_CLOSED", {})
+        const modal = document.getElementById("tutorialVideosModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("TUTORIAL_VIDEOS_MODAL_CLOSED", {});
     },
-    openAddEditVideoModal: function(e = null, t = null) {
-        this.isEditing = null !== e;
-        this.currentEditingIndex = t;
-        const s = document.getElementById("addEditVideoModal");
-        const n = document.getElementById("addEditVideoForm");
-        const a = document.getElementById("addEditVideoTitle");
-        const o = document.getElementById("addEditVideoSubtitle");
-        const r = document.getElementById("saveVideoBtn");
-        this.isEditing ? (a.textContent = "Edit Video", o.textContent = `Editing video: ${e.title}`, r.innerHTML = '<i class="fas fa-save"></i> UPDATE VIDEO', document.getElementById("videoTitle").value = e.title, document.getElementById("videoUrl").value = e.url) : (a.textContent = "Add New Video", o.textContent = "Add a tutorial video to the system", r.innerHTML = '<i class="fas fa-save"></i> SAVE VIDEO', n.reset());
-        s.style.display = "flex"
+    
+    openAddEditVideoModal: function(videoData = null, index = null) {
+        this.isEditing = videoData !== null;
+        this.currentEditingIndex = index;
+        const modal = document.getElementById("addEditVideoModal");
+        const form = document.getElementById("addEditVideoForm");
+        const title = document.getElementById("addEditVideoTitle");
+        const subtitle = document.getElementById("addEditVideoSubtitle");
+        const saveBtn = document.getElementById("saveVideoBtn");
+        
+        if (modal && title && subtitle && saveBtn) {
+            if (this.isEditing && videoData) {
+                title.textContent = "Edit Video";
+                subtitle.textContent = `Editing video: ${videoData.title}`;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> UPDATE VIDEO';
+                document.getElementById("videoTitle").value = videoData.title;
+                document.getElementById("videoUrl").value = videoData.url;
+            } else {
+                title.textContent = "Add New Video";
+                subtitle.textContent = "Add a tutorial video to the system";
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> SAVE VIDEO';
+                form.reset();
+            }
+            modal.style.display = "flex";
+        }
     },
+    
     closeAddEditVideoModal: function() {
-        document.getElementById("addEditVideoModal").style.display = "none";
-        this.isEditing = !1;
-        this.currentEditingIndex = null
+        const modal = document.getElementById("addEditVideoModal");
+        if (modal) modal.style.display = "none";
+        this.isEditing = false;
+        this.currentEditingIndex = null;
     },
-    openVideoPlayer: function(e) {
-        document.getElementById("videoPlayerTitle").textContent = e.title;
-        let t = this.convertToEmbedUrl(e.url);
-        document.getElementById("videoPlayerFrame").src = t;
-        document.getElementById("videoPlayerModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("VIDEO_PLAYER_OPENED", {
-            videoTitle: e.title
-        })
+    
+    openVideoPlayer: function(video) {
+        const title = document.getElementById("videoPlayerTitle");
+        const frame = document.getElementById("videoPlayerFrame");
+        const modal = document.getElementById("videoPlayerModal");
+        
+        if (title && frame && modal) {
+            title.textContent = video.title;
+            const embedUrl = this.convertToEmbedUrl(video.url);
+            frame.src = embedUrl;
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("VIDEO_PLAYER_OPENED", { videoTitle: video.title });
+        }
     },
+    
     closeVideoPlayer: function() {
-        document.getElementById("videoPlayerFrame").src = "";
-        document.getElementById("videoPlayerModal").style.display = "none";
-        document.body.style.overflow = "auto"
+        const frame = document.getElementById("videoPlayerFrame");
+        const modal = document.getElementById("videoPlayerModal");
+        if (frame && modal) {
+            frame.src = "";
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
     },
-    openDeleteVideoModal: function(e, t) {
-        this.currentEditingIndex = t;
-        document.getElementById("deleteVideoInfo").innerHTML = `
-            <div class="package-name"><i class="fas fa-video"></i> ${e.title}</div>
-            <div class="package-details">
-                <div class="package-detail">
-                    <i class="fas fa-link"></i>
-                    <span>Video URL:</span>
-                    <span class="detail-value">${e.url}</span>
+    
+    openDeleteVideoModal: function(video, index) {
+        this.currentEditingIndex = index;
+        const deleteInfo = document.getElementById("deleteVideoInfo");
+        const modal = document.getElementById("deleteVideoConfirmModal");
+        
+        if (deleteInfo && modal) {
+            deleteInfo.innerHTML = `
+                <div class="package-name"><i class="fas fa-video"></i> ${video.title}</div>
+                <div class="package-details">
+                    <div class="package-detail">
+                        <i class="fas fa-link"></i>
+                        <span>Video URL:</span>
+                        <span class="detail-value">${video.url}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-user"></i>
+                        <span>Created By:</span>
+                        <span class="detail-value">${video.createdBy || "admin"}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-calendar"></i>
+                        <span>Created At:</span>
+                        <span class="detail-value">${new Date(video.createdAt).toLocaleDateString()}</span>
+                    </div>
                 </div>
-                <div class="package-detail">
-                    <i class="fas fa-user"></i>
-                    <span>Created By:</span>
-                    <span class="detail-value">${e.createdBy||"admin"}</span>
-                </div>
-                <div class="package-detail">
-                    <i class="fas fa-calendar"></i>
-                    <span>Created At:</span>
-                    <span class="detail-value">${new Date(e.createdAt).toLocaleDateString()}</span>
-                </div>
-            </div>
-        `;
-        document.getElementById("deleteVideoConfirmModal").style.display = "flex"
+            `;
+            modal.style.display = "flex";
+        }
     },
+    
     closeDeleteVideoModal: function() {
-        document.getElementById("deleteVideoConfirmModal").style.display = "none";
-        this.currentEditingIndex = null
+        const modal = document.getElementById("deleteVideoConfirmModal");
+        if (modal) modal.style.display = "none";
+        this.currentEditingIndex = null;
     },
+    
     renderVideos: function() {
-        const e = document.getElementById("videosGridContainer");
-        const t = document.getElementById("noVideosMessage");
-        e.innerHTML = "";
-        const s = "admin" === this.currentUserRole;
-        const n = "moderator" === this.currentUserRole;
-        if (0 === this.videos.length) {
-            t.style.display = "block";
-            e.style.display = "none"
+        const container = document.getElementById("videosGridContainer");
+        const noVideosMsg = document.getElementById("noVideosMessage");
+        
+        if (!container) return;
+        
+        container.innerHTML = "";
+        const isAdmin = this.currentUserRole === "admin";
+        const isModerator = this.currentUserRole === "moderator";
+        
+        if (this.videos.length === 0) {
+            if (noVideosMsg) noVideosMsg.style.display = "block";
+            container.style.display = "none";
         } else {
-            t.style.display = "none";
-            e.style.display = "grid";
-            this.videos.forEach(((t, a) => {
-                const o = document.createElement("div");
-                o.className = "video-card";
-                o.innerHTML = `
+            if (noVideosMsg) noVideosMsg.style.display = "none";
+            container.style.display = "grid";
+            
+            this.videos.forEach((video, index) => {
+                const card = document.createElement("div");
+                card.className = "video-card";
+                card.innerHTML = `
                     <div class="video-thumbnail">
-                        <img src="${t.thumbnail}" alt="${t.title}" loading="lazy" onerror="this.src='https://img.youtube.com/vi/default/hqdefault.jpg'">
+                        <img src="${video.thumbnail}" alt="${video.title}" loading="lazy" onerror="this.src='https://img.youtube.com/vi/default/hqdefault.jpg'">
                         <div class="play-icon">
                             <i class="fas fa-play"></i>
                         </div>
                     </div>
-                    <div class="video-title">${t.title}</div>
-                    ${s||n?`<div class="video-actions">
-                            <button class="video-edit-btn" data-index="${a}" title="Edit Video">
+                    <div class="video-title">${video.title}</div>
+                    ${isAdmin || isModerator ? `
+                        <div class="video-actions">
+                            <button class="video-edit-btn" data-index="${index}" title="Edit Video">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="video-delete-btn" data-index="${a}" title="Delete Video">
+                            <button class="video-delete-btn" data-index="${index}" title="Delete Video">
                                 <i class="fas fa-trash"></i>
                             </button>
-                        </div>`:""}
+                        </div>` : ""}
                 `;
-                o.addEventListener("click", (e => {
-                    e.target.closest(".video-edit-btn") || e.target.closest(".video-delete-btn") || this.openVideoPlayer(t)
-                }));
-                e.appendChild(o)
-            }));
-            this.attachVideoActionListeners()
+                
+                card.addEventListener("click", (e) => {
+                    if (!e.target.closest(".video-edit-btn") && !e.target.closest(".video-delete-btn")) {
+                        this.openVideoPlayer(video);
+                    }
+                });
+                
+                container.appendChild(card);
+            });
+            
+            this.attachVideoActionListeners();
         }
-        const a = document.getElementById("addVideoBtn");
-        s || n ? (a.classList.remove("disabled"), a.disabled = !1) : (a.classList.add("disabled"), a.disabled = !0)
+        
+        const addVideoBtn = document.getElementById("addVideoBtn");
+        if (addVideoBtn) {
+            if (isAdmin || isModerator) {
+                addVideoBtn.classList.remove("disabled");
+                addVideoBtn.disabled = false;
+            } else {
+                addVideoBtn.classList.add("disabled");
+                addVideoBtn.disabled = true;
+            }
+        }
     },
+    
     attachVideoActionListeners: function() {
-        document.querySelectorAll(".video-edit-btn").forEach((e => {
-            e.addEventListener("click", (e => {
+        document.querySelectorAll(".video-edit-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const t = parseInt(e.target.closest(".video-edit-btn").getAttribute("data-index"));
-                const s = this.videos[t];
-                s && this.openAddEditVideoModal(s, t)
-            }))
-        }));
-        document.querySelectorAll(".video-delete-btn").forEach((e => {
-            e.addEventListener("click", (e => {
+                const index = parseInt(e.target.closest(".video-edit-btn").getAttribute("data-index"));
+                const video = this.videos[index];
+                video && this.openAddEditVideoModal(video, index);
+            });
+        });
+        
+        document.querySelectorAll(".video-delete-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const t = parseInt(e.target.closest(".video-delete-btn").getAttribute("data-index"));
-                const s = this.videos[t];
-                s && this.openDeleteVideoModal(s, t)
-            }))
-        }))
+                const index = parseInt(e.target.closest(".video-delete-btn").getAttribute("data-index"));
+                const video = this.videos[index];
+                video && this.openDeleteVideoModal(video, index);
+            });
+        });
     },
+    
     saveVideo: function() {
-        const e = document.getElementById("videoTitle").value.trim();
-        const t = document.getElementById("videoUrl").value.trim();
-        if (!e || !t) return void alert("Please fill in all fields");
+        const titleInput = document.getElementById("videoTitle");
+        const urlInput = document.getElementById("videoUrl");
         
-        const sanitizedTitle = SQL_INJECTION_PROTECTION.sanitizeInput(e);
-        const sanitizedUrl = SQL_INJECTION_PROTECTION.sanitizeInput(t);
+        if (!titleInput || !urlInput) return;
         
-        const titleValidation = SQL_INJECTION_PROTECTION.validateForInjection(e);
-        const urlValidation = SQL_INJECTION_PROTECTION.validateForInjection(t);
+        const title = titleInput.value.trim();
+        const url = urlInput.value.trim();
+        
+        if (!title || !url) {
+            alert("Please fill in all fields");
+            return;
+        }
+        
+        const sanitizedTitle = SQL_INJECTION_PROTECTION.sanitizeInput(title);
+        const sanitizedUrl = SQL_INJECTION_PROTECTION.sanitizeInput(url);
+        
+        const titleValidation = SQL_INJECTION_PROTECTION.validateForInjection(title);
+        const urlValidation = SQL_INJECTION_PROTECTION.validateForInjection(url);
         
         if (!titleValidation.valid) {
             alert(titleValidation.message);
@@ -2785,190 +2886,184 @@ const tutorialVideosSystem = {
             return;
         }
         
-        if (!this.isValidYouTubeUrl(sanitizedUrl)) return void alert("Please enter a valid YouTube URL");
-        const s = this.extractVideoId(sanitizedUrl);
-        if (!s) return void alert("Could not extract video ID from URL");
-        const n = {
+        if (!this.isValidYouTubeUrl(sanitizedUrl)) {
+            alert("Please enter a valid YouTube URL");
+            return;
+        }
+        
+        const videoId = this.extractVideoId(sanitizedUrl);
+        if (!videoId) {
+            alert("Could not extract video ID from URL");
+            return;
+        }
+        
+        const videoData = {
             id: "video_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
             title: sanitizedTitle,
             url: sanitizedUrl,
-            thumbnail: `https://img.youtube.com/vi/${s}/hqdefault.jpg`,
+            thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
             createdBy: this.currentUserRole,
-            createdAt: (new Date).toISOString()
+            createdAt: (new Date()).toISOString()
         };
-        if (this.isEditing) {
-            const n = this.videos[this.currentEditingIndex];
+        
+        if (this.isEditing && this.currentEditingIndex !== null) {
+            const existingVideo = this.videos[this.currentEditingIndex];
             this.videos[this.currentEditingIndex] = {
-                ...n,
+                ...existingVideo,
                 title: sanitizedTitle,
                 url: sanitizedUrl,
-                thumbnail: `https://img.youtube.com/vi/${s}/hqdefault.jpg`,
-                updatedAt: (new Date).toISOString()
+                thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+                updatedAt: (new Date()).toISOString()
             };
             this.showSuccessMessage(`Video "${sanitizedTitle}" updated successfully!`);
             securityLog.add("VIDEO_UPDATED", {
                 videoTitle: sanitizedTitle,
                 editedBy: this.currentUserRole
-            })
+            });
         } else {
-            this.videos.push(n);
+            this.videos.push(videoData);
             this.showSuccessMessage(`Video "${sanitizedTitle}" added successfully!`);
             securityLog.add("VIDEO_ADDED", {
                 videoTitle: sanitizedTitle,
                 addedBy: this.currentUserRole
-            })
+            });
         }
+        
         this.saveVideos();
         this.closeAddEditVideoModal();
-        this.renderVideos()
+        this.renderVideos();
     },
+    
     confirmDeleteVideo: function() {
-        if (null === this.currentEditingIndex) return;
-        const e = this.videos[this.currentEditingIndex];
+        if (this.currentEditingIndex === null) return;
+        
+        const videoToDelete = this.videos[this.currentEditingIndex];
         this.videos.splice(this.currentEditingIndex, 1);
         this.saveVideos();
-        this.showSuccessMessage(`Video "${e.title}" deleted successfully!`);
+        this.showSuccessMessage(`Video "${videoToDelete.title}" deleted successfully!`);
         securityLog.add("VIDEO_DELETED", {
-            videoTitle: e.title,
+            videoTitle: videoToDelete.title,
             deletedBy: this.currentUserRole
         });
         
-        if (firebaseInitialized && db && e.id) {
-            deleteFromFirebase('tutorial_videos', e.id);
+        if (firebaseInitialized && db && videoToDelete.id) {
+            deleteFromFirebase('tutorial_videos', videoToDelete.id);
         }
         
         this.closeDeleteVideoModal();
-        this.renderVideos()
+        this.renderVideos();
     },
-    isValidYouTubeUrl: function(e) {
-        return [/^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/, /^(https?:\/\/)?(m\.)?(youtube\.com)\/.+/, /^(https?:\/\/)?(music\.)?(youtube\.com)\/.+/, /youtube\.com\/embed\//, /youtube\.com\/v\//, /youtube\.com\/shorts\//].some((t => t.test(e)))
+    
+    isValidYouTubeUrl: function(url) {
+        const patterns = [
+            /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/,
+            /^(https?:\/\/)?(m\.)?(youtube\.com)\/.+/,
+            /^(https?:\/\/)?(music\.)?(youtube\.com)\/.+/,
+            /youtube\.com\/embed\//,
+            /youtube\.com\/v\//,
+            /youtube\.com\/shorts\//
+        ];
+        
+        return patterns.some(pattern => pattern.test(url));
     },
-    extractVideoId: function(e) {
-        let t = "";
-        let s = e.match(/[?&]v=([^&#]+)/);
-        s && s[1] && (t = s[1].split("&")[0]);
-        t || (s = e.match(/youtu\.be\/([^&#?]+)/), s && s[1] && (t = s[1].split("?")[0]));
-        t || (s = e.match(/embed\/([^&#?]+)/), s && s[1] && (t = s[1].split("?")[0]));
-        t || (s = e.match(/shorts\/([^&#?]+)/), s && s[1] && (t = s[1].split("?")[0]));
-        t || (s = e.match(/\/v\/([^&#?]+)/), s && s[1] && (t = s[1].split("?")[0]));
-        t && t.length >= 11 && (t = t.substring(0, 11));
-        return t || !1
+    
+    extractVideoId: function(url) {
+        let videoId = "";
+        
+        // Try different patterns
+        let match = url.match(/[?&]v=([^&#]+)/);
+        match && match[1] && (videoId = match[1].split("&")[0]);
+        
+        if (!videoId) {
+            match = url.match(/youtu\.be\/([^&#?]+)/);
+            match && match[1] && (videoId = match[1].split("?")[0]);
+        }
+        
+        if (!videoId) {
+            match = url.match(/embed\/([^&#?]+)/);
+            match && match[1] && (videoId = match[1].split("?")[0]);
+        }
+        
+        if (!videoId) {
+            match = url.match(/shorts\/([^&#?]+)/);
+            match && match[1] && (videoId = match[1].split("?")[0]);
+        }
+        
+        if (!videoId) {
+            match = url.match(/\/v\/([^&#?]+)/);
+            match && match[1] && (videoId = match[1].split("?")[0]);
+        }
+        
+        // Ensure proper length
+        if (videoId && videoId.length >= 11) {
+            videoId = videoId.substring(0, 11);
+        }
+        
+        return videoId || false;
     },
-    convertToEmbedUrl: function(e) {
-        const t = this.extractVideoId(e);
-        return t ? `https://www.youtube.com/embed/${t}?autoplay=1&rel=0&modestbranding=1` : e
+    
+    convertToEmbedUrl: function(url) {
+        const videoId = this.extractVideoId(url);
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1` : url;
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
 
-function setupPasswordToggle() {
-    const e = document.getElementById("togglePassword");
-    const t = document.getElementById("password");
-    e && t && e.addEventListener("click", (function() {
-        const e = "password" === t.getAttribute("type") ? "text" : "password";
-        t.setAttribute("type", e);
-        const s = this.querySelector("i");
-        "password" === e ? (s.classList.remove("fa-eye-slash"), s.classList.add("fa-eye")) : (s.classList.remove("fa-eye"), s.classList.add("fa-eye-slash"))
-    }));
-    const s = document.getElementById("toggleRegPassword");
-    const n = document.getElementById("reg-password");
-    s && n && s.addEventListener("click", (function() {
-        const e = "password" === n.getAttribute("type") ? "text" : "password";
-        n.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const a = document.getElementById("toggleConfirmPassword");
-    const o = document.getElementById("reg-confirm-password");
-    a && o && a.addEventListener("click", (function() {
-        const e = "password" === o.getAttribute("type") ? "text" : "password";
-        o.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const r = document.getElementById("toggleServerPassword");
-    const d = document.getElementById("xtreamPassword");
-    r && d && r.addEventListener("click", (function() {
-        const e = "password" === d.getAttribute("type") ? "text" : "password";
-        d.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const i = document.getElementById("toggleUserPassword");
-    const l = document.getElementById("userPassword");
-    i && l && i.addEventListener("click", (function() {
-        const e = "password" === l.getAttribute("type") ? "text" : "password";
-        l.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const c = document.getElementById("toggleUserConfirmPassword");
-    const u = document.getElementById("userConfirmPassword");
-    c && u && c.addEventListener("click", (function() {
-        const e = "password" === u.getAttribute("type") ? "text" : "password";
-        u.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const m = document.getElementById("toggleNewAdminPassword");
-    const g = document.getElementById("newAdminPassword");
-    m && g && m.addEventListener("click", (function() {
-        const e = "password" === g.getAttribute("type") ? "text" : "password";
-        g.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }));
-    const y = document.getElementById("toggleConfirmAdminPassword");
-    const p = document.getElementById("confirmAdminPassword");
-    y && p && y.addEventListener("click", (function() {
-        const e = "password" === p.getAttribute("type") ? "text" : "password";
-        p.setAttribute("type", e);
-        const t = this.querySelector("i");
-        "password" === e ? (t.classList.remove("fa-eye-slash"), t.classList.add("fa-eye")) : (t.classList.remove("fa-eye"), t.classList.add("fa-eye-slash"))
-    }))
-}
-
-document.addEventListener("DOMContentLoaded", (function() {
-    setupPasswordToggle()
-}));
+// ============================================
+// نظام إدارة المستخدمين
+// ============================================
 
 const userManagementSystem = {
     currentUserRole: "user",
     currentEditingIndex: null,
-    isEditing: !1,
+    isEditing: false,
+    
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeUserManagement").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("userManagementModal").addEventListener("click", (e => {
-            e.target === document.getElementById("userManagementModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("userManagementModal").style.display && this.closeModal()
-        }));
-        document.getElementById("addUserBtn").addEventListener("click", (() => {
-            this.openAddEditUserModal()
-        }));
-        document.getElementById("closeAddEditUser").addEventListener("click", (() => {
-            this.closeAddEditUserModal()
-        }));
-        document.getElementById("addEditUserModal").addEventListener("click", (e => {
-            e.target === document.getElementById("addEditUserModal") && this.closeAddEditUserModal()
-        }));
-        document.getElementById("cancelAddEditUser").addEventListener("click", (() => {
-            this.closeAddEditUserModal()
-        }));
-        document.getElementById("addEditUserForm").addEventListener("submit", (e => {
+        const closeBtn = document.getElementById("closeUserManagement");
+        const modal = document.getElementById("userManagementModal");
+        const addUserBtn = document.getElementById("addUserBtn");
+        const closeAddEditBtn = document.getElementById("closeAddEditUser");
+        const addEditModal = document.getElementById("addEditUserModal");
+        const cancelBtn = document.getElementById("cancelAddEditUser");
+        const form = document.getElementById("addEditUserForm");
+        const passwordInput = document.getElementById("userPassword");
+        const closeDeleteBtn = document.getElementById("closeDeleteUser");
+        const deleteModal = document.getElementById("deleteUserModal");
+        const cancelDeleteBtn = document.getElementById("cancelDeleteUser");
+        const confirmDeleteBtn = document.getElementById("confirmDeleteUser");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
+        
+        addUserBtn && addUserBtn.addEventListener("click", () => this.openAddEditUserModal());
+        closeAddEditBtn && closeAddEditBtn.addEventListener("click", () => this.closeAddEditUserModal());
+        addEditModal && addEditModal.addEventListener("click", (e) => {
+            e.target === addEditModal && this.closeAddEditUserModal();
+        });
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeAddEditUserModal());
+        form && form.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -2976,176 +3071,264 @@ const userManagementSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }));
-        document.getElementById("userPassword").addEventListener("input", (() => {
-            this.updatePasswordStrength()
-        }));
-        document.getElementById("closeDeleteUser").addEventListener("click", (() => {
-            this.closeDeleteUserModal()
-        }));
-        document.getElementById("deleteUserModal").addEventListener("click", (e => {
-            e.target === document.getElementById("deleteUserModal") && this.closeDeleteUserModal()
-        }));
-        document.getElementById("cancelDeleteUser").addEventListener("click", (() => {
-            this.closeDeleteUserModal()
-        }));
-        document.getElementById("confirmDeleteUser").addEventListener("click", (() => {
-            this.confirmDeleteUser()
-        }))
+        });
+        
+        passwordInput && passwordInput.addEventListener("input", () => this.updatePasswordStrength());
+        
+        closeDeleteBtn && closeDeleteBtn.addEventListener("click", () => this.closeDeleteUserModal());
+        deleteModal && deleteModal.addEventListener("click", (e) => {
+            e.target === deleteModal && this.closeDeleteUserModal();
+        });
+        cancelDeleteBtn && cancelDeleteBtn.addEventListener("click", () => this.closeDeleteUserModal());
+        confirmDeleteBtn && confirmDeleteBtn.addEventListener("click", () => this.confirmDeleteUser());
     },
-    openModal: function(e) {
-        this.currentUserRole = e;
-        document.getElementById("userManagementModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
+    
+    openModal: function(userRole) {
+        this.currentUserRole = userRole;
+        const modal = document.getElementById("userManagementModal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+        }
         this.renderUsers();
-        securityLog.add("USER_MANAGEMENT_MODAL_OPENED", {
-            userRole: e
-        })
+        securityLog.add("USER_MANAGEMENT_MODAL_OPENED", { userRole: userRole });
     },
+    
     closeModal: function() {
-        document.getElementById("userManagementModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("USER_MANAGEMENT_MODAL_CLOSED", {})
+        const modal = document.getElementById("userManagementModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("USER_MANAGEMENT_MODAL_CLOSED", {});
     },
-    openAddEditUserModal: function(e = null, t = null, s = null) {
-        this.isEditing = null !== e;
-        this.currentEditingIndex = t;
-        const n = document.getElementById("addEditUserModal");
-        const a = document.getElementById("addEditUserForm");
-        const o = document.getElementById("addEditUserTitle");
-        const r = document.getElementById("addEditUserSubtitle");
-        const d = document.getElementById("saveUserBtn");
-        this.isEditing ? (o.textContent = "Edit User", r.textContent = `Editing user: ${e.username}`, d.innerHTML = '<i class="fas fa-save"></i> UPDATE USER', document.getElementById("userUsername").value = e.username, document.getElementById("userEmail").value = e.email || "", document.getElementById("userRole").value = e.role || "user", document.getElementById("userPassword").value = "", document.getElementById("userConfirmPassword").value = "") : (o.textContent = "Add New User", r.textContent = "Create a new user account", d.innerHTML = '<i class="fas fa-save"></i> SAVE USER', a.reset());
-        this.updatePasswordStrength();
-        n.style.display = "flex"
-    },
-    closeAddEditUserModal: function() {
-        document.getElementById("addEditUserModal").style.display = "none";
-        this.isEditing = !1;
-        this.currentEditingIndex = null
-    },
-    openDeleteUserModal: function(e, t) {
-        this.currentEditingIndex = t;
-        document.getElementById("deleteUserInfo").innerHTML = `
-            <div class="delete-user-detail">
-                <i class="fas fa-user"></i>
-                <span>Username: <strong>${e.username}</strong></span>
-            </div>
-            <div class="delete-user-detail">
-                <i class="fas fa-envelope"></i>
-                <span>Email: <strong>${e.email||"N/A"}</strong></span>
-            </div>
-            <div class="delete-user-detail">
-                <i class="fas fa-user-tag"></i>
-                <span>Role: <strong>${e.role}</strong></span>
-            </div>
-            <div class="delete-user-detail">
-                <i class="fas fa-calendar"></i>
-                <span>Created: <strong>${new Date(e.createdAt).toLocaleDateString()}</strong></span>
-            </div>
-        `;
-        document.getElementById("deleteUserModal").style.display = "flex"
-    },
-    closeDeleteUserModal: function() {
-        document.getElementById("deleteUserModal").style.display = "none";
-        this.currentEditingIndex = null
-    },
-    renderUsers: function() {
-        const e = document.getElementById("userTableBody");
-        const t = document.getElementById("noUsersMessage");
-        e.innerHTML = "";
-        const s = currentUser ? currentUser.username : "";
-        const n = "admin" === this.currentUserRole;
-        const a = "moderator" === this.currentUserRole;
-        if (0 === users.length) {
-            t.style.display = "block";
-            e.style.display = "none"
-        } else {
-            t.style.display = "none";
-            e.style.display = "";
-            users.forEach(((t, o) => {
-                const r = document.createElement("tr");
-                let d = "";
-                d = "admin" === t.role ? '<span class="role-badge role-admin">Admin</span>' : "moderator" === t.role ? '<span class="role-badge role-moderator">Moderator</span>' : '<span class="role-badge role-user">User</span>';
-                let i = "";
-                n ? t.username !== s && (i = `<div class="user-actions">
-                                <button class="user-action-btn edit-btn" data-index="${o}">
-                                    <i class="fas fa-edit"></i> Edit
-                                </button>
-                                <button class="user-action-btn delete-btn" data-index="${o}">
-                                    <i class="fas fa-trash"></i> Delete
-                                </button>
-                            </div>`) : a && "user" === t.role && (i = `<div class="user-actions">
-                                <button class="user-action-btn edit-btn" data-index="${o}">
-                                    <i class="fas fa-edit"></i> Edit
-                                </button>
-                            </div>`);
-                r.innerHTML = `
-                    <td>
-                        <div style="display:flex;flex-direction:column;">
-                            <span>${t.username}</span>
-                            ${t.username===s?'<small style="font-size:0.7rem;color:rgba(100,255,100,0.8);">(You)</small>':""}
-                        </div>
-                    </td>
-                    <td>${t.email||"N/A"}</td>
-                    <td>${d}</td>
-                    <td>${new Date(t.createdAt).toLocaleDateString()}</td>
-                    <td>${i}</td>
-                `;
-                e.appendChild(r)
-            }));
-            this.updateStats();
-            this.attachUserActionListeners()
+    
+    openAddEditUserModal: function(userData = null, index = null) {
+        this.isEditing = userData !== null;
+        this.currentEditingIndex = index;
+        const modal = document.getElementById("addEditUserModal");
+        const form = document.getElementById("addEditUserForm");
+        const title = document.getElementById("addEditUserTitle");
+        const subtitle = document.getElementById("addEditUserSubtitle");
+        const saveBtn = document.getElementById("saveUserBtn");
+        
+        if (modal && title && subtitle && saveBtn) {
+            if (this.isEditing && userData) {
+                title.textContent = "Edit User";
+                subtitle.textContent = `Editing user: ${userData.username}`;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> UPDATE USER';
+                document.getElementById("userUsername").value = userData.username;
+                document.getElementById("userEmail").value = userData.email || "";
+                document.getElementById("userRole").value = userData.role || "user";
+                document.getElementById("userPassword").value = "";
+                document.getElementById("userConfirmPassword").value = "";
+            } else {
+                title.textContent = "Add New User";
+                subtitle.textContent = "Create a new user account";
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> SAVE USER';
+                form.reset();
+            }
+            this.updatePasswordStrength();
+            modal.style.display = "flex";
         }
     },
+    
+    closeAddEditUserModal: function() {
+        const modal = document.getElementById("addEditUserModal");
+        if (modal) modal.style.display = "none";
+        this.isEditing = false;
+        this.currentEditingIndex = null;
+    },
+    
+    openDeleteUserModal: function(user, index) {
+        this.currentEditingIndex = index;
+        const deleteInfo = document.getElementById("deleteUserInfo");
+        const modal = document.getElementById("deleteUserModal");
+        
+        if (deleteInfo && modal) {
+            deleteInfo.innerHTML = `
+                <div class="delete-user-detail">
+                    <i class="fas fa-user"></i>
+                    <span>Username: <strong>${user.username}</strong></span>
+                </div>
+                <div class="delete-user-detail">
+                    <i class="fas fa-envelope"></i>
+                    <span>Email: <strong>${user.email || "N/A"}</strong></span>
+                </div>
+                <div class="delete-user-detail">
+                    <i class="fas fa-user-tag"></i>
+                    <span>Role: <strong>${user.role}</strong></span>
+                </div>
+                <div class="delete-user-detail">
+                    <i class="fas fa-calendar"></i>
+                    <span>Created: <strong>${new Date(user.createdAt).toLocaleDateString()}</strong></span>
+                </div>
+            `;
+            modal.style.display = "flex";
+        }
+    },
+    
+    closeDeleteUserModal: function() {
+        const modal = document.getElementById("deleteUserModal");
+        if (modal) modal.style.display = "none";
+        this.currentEditingIndex = null;
+    },
+    
+    renderUsers: function() {
+        const tbody = document.getElementById("userTableBody");
+        const noUsersMsg = document.getElementById("noUsersMessage");
+        
+        if (!tbody) return;
+        
+        tbody.innerHTML = "";
+        const currentUsername = currentUser ? currentUser.username : "";
+        const isAdmin = this.currentUserRole === "admin";
+        const isModerator = this.currentUserRole === "moderator";
+        
+        if (users.length === 0) {
+            if (noUsersMsg) noUsersMsg.style.display = "block";
+            tbody.style.display = "none";
+        } else {
+            if (noUsersMsg) noUsersMsg.style.display = "none";
+            tbody.style.display = "";
+            
+            users.forEach((user, index) => {
+                const row = document.createElement("tr");
+                let roleBadge = "";
+                if (user.role === "admin") {
+                    roleBadge = '<span class="role-badge role-admin">Admin</span>';
+                } else if (user.role === "moderator") {
+                    roleBadge = '<span class="role-badge role-moderator">Moderator</span>';
+                } else {
+                    roleBadge = '<span class="role-badge role-user">User</span>';
+                }
+                
+                let actions = "";
+                if (isAdmin && user.username !== currentUsername) {
+                    actions = `
+                        <div class="user-actions">
+                            <button class="user-action-btn edit-btn" data-index="${index}">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="user-action-btn delete-btn" data-index="${index}">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    `;
+                } else if (isModerator && user.role === "user") {
+                    actions = `
+                        <div class="user-actions">
+                            <button class="user-action-btn edit-btn" data-index="${index}">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                row.innerHTML = `
+                    <td>
+                        <div style="display:flex;flex-direction:column;">
+                            <span>${user.username}</span>
+                            ${user.username === currentUsername ? '<small style="font-size:0.7rem;color:rgba(100,255,100,0.8);">(You)</small>' : ""}
+                        </div>
+                    </td>
+                    <td>${user.email || "N/A"}</td>
+                    <td>${roleBadge}</td>
+                    <td>${new Date(user.createdAt).toLocaleDateString()}</td>
+                    <td>${actions}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            this.updateStats();
+            this.attachUserActionListeners();
+        }
+    },
+    
     updateStats: function() {
-        const e = users.length;
-        const t = users.filter((e => "admin" === e.role)).length;
-        const s = users.filter((e => "moderator" === e.role)).length;
-        const n = users.filter((e => "user" === e.role)).length;
-        document.getElementById("totalUsers").textContent = e;
-        document.getElementById("adminUsers").textContent = t;
-        document.getElementById("moderatorUsers").textContent = s;
-        document.getElementById("regularUsers").textContent = n
+        const totalUsers = document.getElementById("totalUsers");
+        const adminUsers = document.getElementById("adminUsers");
+        const moderatorUsers = document.getElementById("moderatorUsers");
+        const regularUsers = document.getElementById("regularUsers");
+        
+        if (totalUsers) totalUsers.textContent = users.length;
+        if (adminUsers) adminUsers.textContent = users.filter(u => u.role === "admin").length;
+        if (moderatorUsers) moderatorUsers.textContent = users.filter(u => u.role === "moderator").length;
+        if (regularUsers) regularUsers.textContent = users.filter(u => u.role === "user").length;
     },
+    
     attachUserActionListeners: function() {
-        document.querySelectorAll(".edit-btn").forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".edit-btn").getAttribute("data-index"));
-                const s = users[t];
-                s && this.openAddEditUserModal(s, t)
-            }))
-        }));
-        document.querySelectorAll(".delete-btn").forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
-                const s = users[t];
-                s && this.openDeleteUserModal(s, t)
-            }))
-        }))
+        document.querySelectorAll(".edit-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".edit-btn").getAttribute("data-index"));
+                const user = users[index];
+                user && this.openAddEditUserModal(user, index);
+            });
+        });
+        
+        document.querySelectorAll(".delete-btn").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
+                const user = users[index];
+                user && this.openDeleteUserModal(user, index);
+            });
+        });
     },
+    
     updatePasswordStrength: function() {
-        const e = document.getElementById("userPassword").value;
-        const t = document.getElementById("userPasswordStrength");
-        const s = document.getElementById("userPasswordStrengthFill");
-        let n = 0;
-        let a = "None";
-        let o = "";
-        e.length >= 8 && n++;
-        /[A-Z]/.test(e) && n++;
-        /[a-z]/.test(e) && n++;
-        /\d/.test(e) && n++;
-        /[!@#$%^&*(),.?":{}|<>]/.test(e) && n++;
-        0 === n ? (a = "Very Weak", o = "weak") : n <= 2 ? (a = "Weak", o = "weak") : n <= 3 ? (a = "Fair", o = "fair") : n <= 4 ? (a = "Good", o = "good") : (a = "Strong", o = "strong");
-        t.textContent = `Password Strength: ${a}`;
-        s.className = `password-strength-fill ${o}`
+        const passwordInput = document.getElementById("userPassword");
+        const strengthText = document.getElementById("userPasswordStrength");
+        const strengthFill = document.getElementById("userPasswordStrengthFill");
+        
+        if (!passwordInput || !strengthText || !strengthFill) return;
+        
+        const password = passwordInput.value;
+        let strength = 0;
+        let strengthLevel = "None";
+        let fillClass = "";
+        
+        if (password.length >= 8) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[a-z]/.test(password)) strength++;
+        if (/\d/.test(password)) strength++;
+        if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
+        
+        if (strength === 0) {
+            strengthLevel = "Very Weak";
+            fillClass = "weak";
+        } else if (strength <= 2) {
+            strengthLevel = "Weak";
+            fillClass = "weak";
+        } else if (strength <= 3) {
+            strengthLevel = "Fair";
+            fillClass = "fair";
+        } else if (strength <= 4) {
+            strengthLevel = "Good";
+            fillClass = "good";
+        } else {
+            strengthLevel = "Strong";
+            fillClass = "strong";
+        }
+        
+        strengthText.textContent = `Password Strength: ${strengthLevel}`;
+        strengthFill.className = `password-strength-fill ${fillClass}`;
     },
+    
     saveUser: function() {
-        const username = document.getElementById("userUsername").value.trim();
-        const email = document.getElementById("userEmail").value.trim();
-        const role = document.getElementById("userRole").value;
-        const password = document.getElementById("userPassword").value;
-        const confirmPassword = document.getElementById("userConfirmPassword").value;
+        const usernameInput = document.getElementById("userUsername");
+        const emailInput = document.getElementById("userEmail");
+        const roleInput = document.getElementById("userRole");
+        const passwordInput = document.getElementById("userPassword");
+        const confirmPasswordInput = document.getElementById("userConfirmPassword");
+        
+        if (!usernameInput || !emailInput || !roleInput || !passwordInput || !confirmPasswordInput) return;
+        
+        const username = usernameInput.value.trim();
+        const email = emailInput.value.trim();
+        const role = roleInput.value;
+        const password = passwordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
         
         const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
         const sanitizedEmail = SQL_INJECTION_PROTECTION.sanitizeInput(email);
@@ -3185,7 +3368,7 @@ const userManagementSystem = {
         
         const currentUsername = currentUser ? currentUser.username : "";
         
-        if (this.isEditing) {
+        if (this.isEditing && this.currentEditingIndex !== null) {
             const user = users[this.currentEditingIndex];
             
             if (user.username === "Admin's" && sanitizedUsername !== "Admin's") {
@@ -3239,12 +3422,11 @@ const userManagementSystem = {
                 password: passwordHash,
                 role: role,
                 email: sanitizedEmail,
-                createdAt: (new Date).toISOString(),
+                createdAt: (new Date()).toISOString(),
                 id: "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
             };
             
             users.push(newUser);
-            
             saveUsersToStorage();
             
             if (firebaseInitialized && db) {
@@ -3265,7 +3447,8 @@ const userManagementSystem = {
     },
     
     confirmDeleteUser: function() {
-        if (null === this.currentEditingIndex) return;
+        if (this.currentEditingIndex === null) return;
+        
         const userToDelete = users[this.currentEditingIndex];
         const currentUsername = currentUser ? currentUser.username : "";
         
@@ -3283,7 +3466,6 @@ const userManagementSystem = {
         
         if (confirm(`⚠️ Are you sure you want to delete user "${userToDelete.username}"? This action cannot be undone!`)) {
             users.splice(this.currentEditingIndex, 1);
-            
             saveUsersToStorage();
             
             if (firebaseInitialized && db && userToDelete.id) {
@@ -3291,7 +3473,6 @@ const userManagementSystem = {
             }
             
             this.showSuccessMessage(`User "${userToDelete.username}" deleted successfully!`);
-            
             securityLog.add("USER_DELETED", {
                 username: userToDelete.username,
                 deletedBy: currentUsername
@@ -3299,35 +3480,49 @@ const userManagementSystem = {
             
             this.closeDeleteUserModal();
             this.renderUsers();
-            
             updateSyncStatusUI();
         }
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
 
+// ============================================
+// نظام إدارة حساب المسؤول
+// ============================================
+
 const adminAccountSystem = {
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeChangeAdminUsername").addEventListener("click", (() => {
-            this.closeChangeAdminUsernameModal()
-        }));
-        document.getElementById("changeAdminUsernameModal").addEventListener("click", (e => {
-            e.target === document.getElementById("changeAdminUsernameModal") && this.closeChangeAdminUsernameModal()
-        }));
-        document.getElementById("cancelChangeAdminUsername").addEventListener("click", (() => {
-            this.closeChangeAdminUsernameModal()
-        }));
-        document.getElementById("changeAdminUsernameForm").addEventListener("submit", (e => {
+        const closeUsernameBtn = document.getElementById("closeChangeAdminUsername");
+        const usernameModal = document.getElementById("changeAdminUsernameModal");
+        const cancelUsernameBtn = document.getElementById("cancelChangeAdminUsername");
+        const usernameForm = document.getElementById("changeAdminUsernameForm");
+        
+        const closePasswordBtn = document.getElementById("closeChangeAdminPassword");
+        const passwordModal = document.getElementById("changeAdminPasswordModal");
+        const cancelPasswordBtn = document.getElementById("cancelChangeAdminPassword");
+        const passwordForm = document.getElementById("changeAdminPasswordForm");
+        const newPasswordInput = document.getElementById("newAdminPassword");
+        
+        closeUsernameBtn && closeUsernameBtn.addEventListener("click", () => this.closeChangeAdminUsernameModal());
+        usernameModal && usernameModal.addEventListener("click", (e) => {
+            e.target === usernameModal && this.closeChangeAdminUsernameModal();
+        });
+        cancelUsernameBtn && cancelUsernameBtn.addEventListener("click", () => this.closeChangeAdminUsernameModal());
+        usernameForm && usernameForm.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -3335,17 +3530,14 @@ const adminAccountSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }));
-        document.getElementById("closeChangeAdminPassword").addEventListener("click", (() => {
-            this.closeChangeAdminPasswordModal()
-        }));
-        document.getElementById("changeAdminPasswordModal").addEventListener("click", (e => {
-            e.target === document.getElementById("changeAdminPasswordModal") && this.closeChangeAdminPasswordModal()
-        }));
-        document.getElementById("cancelChangeAdminPassword").addEventListener("click", (() => {
-            this.closeChangeAdminPasswordModal()
-        }));
-        document.getElementById("changeAdminPasswordForm").addEventListener("submit", (e => {
+        });
+        
+        closePasswordBtn && closePasswordBtn.addEventListener("click", () => this.closeChangeAdminPasswordModal());
+        passwordModal && passwordModal.addEventListener("click", (e) => {
+            e.target === passwordModal && this.closeChangeAdminPasswordModal();
+        });
+        cancelPasswordBtn && cancelPasswordBtn.addEventListener("click", () => this.closeChangeAdminPasswordModal());
+        passwordForm && passwordForm.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -3353,63 +3545,97 @@ const adminAccountSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }));
-        document.getElementById("newAdminPassword").addEventListener("input", (() => {
-            this.updateAdminPasswordStrength()
-        }))
-    },
-    openChangeAdminUsernameModal: function() {
-        document.getElementById("currentAdminUsername").value = currentUser ? currentUser.username : "admin";
-        document.getElementById("newAdminUsername").value = "";
-        document.getElementById("changeAdminUsernameModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("CHANGE_ADMIN_USERNAME_MODAL_OPENED", {})
-    },
-    closeChangeAdminUsernameModal: function() {
-        document.getElementById("changeAdminUsernameModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("CHANGE_ADMIN_USERNAME_MODAL_CLOSED", {})
-    },
-    openChangeAdminPasswordModal: function() {
-        document.getElementById("newAdminPassword").value = "";
-        document.getElementById("confirmAdminPassword").value = "";
-        document.getElementById("changeAdminPasswordModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        this.updateAdminPasswordStrength();
-        securityLog.add("CHANGE_ADMIN_PASSWORD_MODAL_OPENED", {})
-    },
-    closeChangeAdminPasswordModal: function() {
-        document.getElementById("changeAdminPasswordModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("CHANGE_ADMIN_PASSWORD_MODAL_CLOSED", {})
-    },
-    changeAdminUsername: function() {
-        const e = document.getElementById("newAdminUsername").value.trim();
+        });
         
-        const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(e);
-        const validation = SQL_INJECTION_PROTECTION.validateForInjection(e);
+        newPasswordInput && newPasswordInput.addEventListener("input", () => this.updateAdminPasswordStrength());
+    },
+    
+    openChangeAdminUsernameModal: function() {
+        const currentUsernameInput = document.getElementById("currentAdminUsername");
+        const newUsernameInput = document.getElementById("newAdminUsername");
+        const modal = document.getElementById("changeAdminUsernameModal");
+        
+        if (currentUsernameInput && newUsernameInput && modal) {
+            currentUsernameInput.value = currentUser ? currentUser.username : "admin";
+            newUsernameInput.value = "";
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("CHANGE_ADMIN_USERNAME_MODAL_OPENED", {});
+        }
+    },
+    
+    closeChangeAdminUsernameModal: function() {
+        const modal = document.getElementById("changeAdminUsernameModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("CHANGE_ADMIN_USERNAME_MODAL_CLOSED", {});
+    },
+    
+    openChangeAdminPasswordModal: function() {
+        const newPasswordInput = document.getElementById("newAdminPassword");
+        const confirmPasswordInput = document.getElementById("confirmAdminPassword");
+        const modal = document.getElementById("changeAdminPasswordModal");
+        
+        if (newPasswordInput && confirmPasswordInput && modal) {
+            newPasswordInput.value = "";
+            confirmPasswordInput.value = "";
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            this.updateAdminPasswordStrength();
+            securityLog.add("CHANGE_ADMIN_PASSWORD_MODAL_OPENED", {});
+        }
+    },
+    
+    closeChangeAdminPasswordModal: function() {
+        const modal = document.getElementById("changeAdminPasswordModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("CHANGE_ADMIN_PASSWORD_MODAL_CLOSED", {});
+    },
+    
+    changeAdminUsername: function() {
+        const newUsernameInput = document.getElementById("newAdminUsername");
+        if (!newUsernameInput) return;
+        
+        const newUsername = newUsernameInput.value.trim();
+        const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(newUsername);
+        const validation = SQL_INJECTION_PROTECTION.validateForInjection(newUsername);
         
         if (!validation.valid) {
             alert(validation.message);
             return;
         }
         
-        if (!sanitizedUsername) return void alert("Please enter a new username");
-        
-        const currentUsername = currentUser ? currentUser.username : "admin";
-        if (currentUsername === sanitizedUsername) return void alert("⚠️ New username must be different from the current one");
-        
-        const t = inputValidation.validateUsername(sanitizedUsername);
-        if (!t.valid) return void alert(t.message);
-        
-        if (users.find((t => t.username === sanitizedUsername && t.username !== currentUsername))) {
-            return void alert("⚠️ Username already exists! Please choose another one.");
+        if (!sanitizedUsername) {
+            alert("Please enter a new username");
+            return;
         }
         
-        const s = users.findIndex((e => e.username === currentUsername));
-        if (s !== -1) {
-            const t = users[s].username;
-            users[s].username = sanitizedUsername;
+        const currentUsername = currentUser ? currentUser.username : "admin";
+        if (currentUsername === sanitizedUsername) {
+            alert("⚠️ New username must be different from the current one");
+            return;
+        }
+        
+        const usernameValidation = inputValidation.validateUsername(sanitizedUsername);
+        if (!usernameValidation.valid) {
+            alert(usernameValidation.message);
+            return;
+        }
+        
+        if (users.find(u => u.username === sanitizedUsername && u.username !== currentUsername)) {
+            alert("⚠️ Username already exists! Please choose another one.");
+            return;
+        }
+        
+        const userIndex = users.findIndex(u => u.username === currentUsername);
+        if (userIndex !== -1) {
+            const oldUsername = users[userIndex].username;
+            users[userIndex].username = sanitizedUsername;
             
             if (currentUser && currentUser.username === currentUsername) {
                 currentUser.username = sanitizedUsername;
@@ -3417,188 +3643,286 @@ const adminAccountSystem = {
             }
             
             saveUsersToStorage();
-            this.showSuccessMessage(`Admin username changed from "${t}" to "${sanitizedUsername}"!`);
+            this.showSuccessMessage(`Admin username changed from "${oldUsername}" to "${sanitizedUsername}"!`);
             securityLog.add("ADMIN_USERNAME_CHANGED", {
-                oldUsername: t,
+                oldUsername: oldUsername,
                 newUsername: sanitizedUsername
             });
             this.closeChangeAdminUsernameModal();
         }
     },
+    
     changeAdminPassword: function() {
-        const e = document.getElementById("newAdminPassword").value;
-        const t = document.getElementById("confirmAdminPassword").value;
+        const newPasswordInput = document.getElementById("newAdminPassword");
+        const confirmPasswordInput = document.getElementById("confirmAdminPassword");
         
-        if (!e) return void alert("Please enter a new password");
+        if (!newPasswordInput || !confirmPasswordInput) return;
         
-        const s = inputValidation.validatePassword(e);
-        if (!s.valid) return void alert(s.message);
+        const newPassword = newPasswordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
         
-        if (e !== t) return void alert("Passwords do not match!");
+        if (!newPassword) {
+            alert("Please enter a new password");
+            return;
+        }
+        
+        const passwordValidation = inputValidation.validatePassword(newPassword);
+        if (!passwordValidation.valid) {
+            alert(passwordValidation.message);
+            return;
+        }
+        
+        if (newPassword !== confirmPassword) {
+            alert("Passwords do not match!");
+            return;
+        }
         
         const currentUsername = currentUser ? currentUser.username : "admin";
-        const a = users.findIndex((e => e.username === currentUsername));
+        const userIndex = users.findIndex(u => u.username === currentUsername);
         
-        if (a !== -1) {
-            const n = encryption.hashPassword(e);
-            users[a].password = n;
+        if (userIndex !== -1) {
+            const passwordHash = encryption.hashPassword(newPassword);
+            users[userIndex].password = passwordHash;
             saveUsersToStorage();
             this.showSuccessMessage("Admin password changed successfully!");
-            securityLog.add("ADMIN_PASSWORD_CHANGED", {
-                username: currentUsername
-            });
+            securityLog.add("ADMIN_PASSWORD_CHANGED", { username: currentUsername });
             this.closeChangeAdminPasswordModal();
         } else {
             alert("Error: Admin account not found!");
         }
     },
+    
     updateAdminPasswordStrength: function() {
-        const e = document.getElementById("newAdminPassword").value;
-        const t = document.getElementById("adminPasswordStrength");
-        const s = document.getElementById("adminPasswordStrengthFill");
-        let n = 0;
-        let a = "None";
-        let o = "";
-        e.length >= 8 && n++;
-        /[A-Z]/.test(e) && n++;
-        /[a-z]/.test(e) && n++;
-        /\d/.test(e) && n++;
-        /[!@#$%^&*(),.?":{}|<>]/.test(e) && n++;
-        0 === n ? (a = "Very Weak", o = "weak") : n <= 2 ? (a = "Weak", o = "weak") : n <= 3 ? (a = "Fair", o = "fair") : n <= 4 ? (a = "Good", o = "good") : (a = "Strong", o = "strong");
-        t.textContent = `Password Strength: ${a}`;
-        s.className = `password-strength-fill ${o}`
+        const passwordInput = document.getElementById("newAdminPassword");
+        const strengthText = document.getElementById("adminPasswordStrength");
+        const strengthFill = document.getElementById("adminPasswordStrengthFill");
+        
+        if (!passwordInput || !strengthText || !strengthFill) return;
+        
+        const password = passwordInput.value;
+        let strength = 0;
+        let strengthLevel = "None";
+        let fillClass = "";
+        
+        if (password.length >= 8) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[a-z]/.test(password)) strength++;
+        if (/\d/.test(password)) strength++;
+        if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
+        
+        if (strength === 0) {
+            strengthLevel = "Very Weak";
+            fillClass = "weak";
+        } else if (strength <= 2) {
+            strengthLevel = "Weak";
+            fillClass = "weak";
+        } else if (strength <= 3) {
+            strengthLevel = "Fair";
+            fillClass = "fair";
+        } else if (strength <= 4) {
+            strengthLevel = "Good";
+            fillClass = "good";
+        } else {
+            strengthLevel = "Strong";
+            fillClass = "strong";
+        }
+        
+        strengthText.textContent = `Password Strength: ${strengthLevel}`;
+        strengthFill.className = `password-strength-fill ${fillClass}`;
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
 
+// ============================================
+// نظام الإعدادات
+// ============================================
+
 const settingsSystem = {
     currentUserRole: "user",
+    
     init: function() {
         this.setupEventListeners();
         this.loadSettings();
         this.updateKeyStatus();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeSettings").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("settingsModal").addEventListener("click", (e => {
-            e.target === document.getElementById("settingsModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("settingsModal").style.display && this.closeModal()
-        }));
-        document.getElementById("changeAdminUsernameBtn").addEventListener("click", (() => {
-            adminAccountSystem.openChangeAdminUsernameModal()
-        }));
-        document.getElementById("changeAdminPasswordBtn").addEventListener("click", (() => {
-            adminAccountSystem.openChangeAdminPasswordModal()
-        }));
-        document.getElementById("resetSettingsBtn").addEventListener("click", (() => {
-            this.resetSettings()
-        }));
-        document.getElementById("saveSettingsBtn").addEventListener("click", (() => {
-            this.saveSettings()
-        }));
-        document.getElementById("rotateEncryptionKeyBtn").addEventListener("click", (() => {
-            this.rotateEncryptionKey()
-        }));
-        document.getElementById("backupEncryptionKeysBtn").addEventListener("click", (() => {
-            backupSystem.backupEncryptionKeys()
-        }));
+        const closeBtn = document.getElementById("closeSettings");
+        const modal = document.getElementById("settingsModal");
+        const changeUsernameBtn = document.getElementById("changeAdminUsernameBtn");
+        const changePasswordBtn = document.getElementById("changeAdminPasswordBtn");
+        const resetBtn = document.getElementById("resetSettingsBtn");
+        const saveBtn = document.getElementById("saveSettingsBtn");
+        const rotateKeyBtn = document.getElementById("rotateEncryptionKeyBtn");
+        const backupKeysBtn = document.getElementById("backupEncryptionKeysBtn");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
+        
+        changeUsernameBtn && changeUsernameBtn.addEventListener("click", () => {
+            adminAccountSystem.openChangeAdminUsernameModal();
+        });
+        
+        changePasswordBtn && changePasswordBtn.addEventListener("click", () => {
+            adminAccountSystem.openChangeAdminPasswordModal();
+        });
+        
+        resetBtn && resetBtn.addEventListener("click", () => this.resetSettings());
+        saveBtn && saveBtn.addEventListener("click", () => this.saveSettings());
+        rotateKeyBtn && rotateKeyBtn.addEventListener("click", () => this.rotateEncryptionKey());
+        backupKeysBtn && backupKeysBtn.addEventListener("click", () => backupSystem.backupEncryptionKeys());
     },
+    
     loadSettings: function() {
         try {
-            const e = localStorage.getItem("app_settings");
-            if (e) {
-                const t = JSON.parse(e);
-                void 0 !== t.lazyLoading && (document.getElementById("lazyLoading").checked = t.lazyLoading);
-                void 0 !== t.cacheOptimization && (document.getElementById("cacheOptimization").checked = t.cacheOptimization);
-                t.captchaStrength && (document.getElementById("captchaStrength").value = t.captchaStrength);
-                t.loginAttemptLimit && (document.getElementById("loginAttemptLimit").value = t.loginAttemptLimit);
-                void 0 !== t.autoKeyRotation && (document.getElementById("autoKeyRotation").checked = t.autoKeyRotation);
+            const settings = localStorage.getItem("app_settings");
+            if (settings) {
+                const data = JSON.parse(settings);
+                const lazyLoading = document.getElementById("lazyLoading");
+                const cacheOptimization = document.getElementById("cacheOptimization");
+                const captchaStrength = document.getElementById("captchaStrength");
+                const loginAttemptLimit = document.getElementById("loginAttemptLimit");
+                const autoKeyRotation = document.getElementById("autoKeyRotation");
+                
+                if (lazyLoading && data.lazyLoading !== undefined) lazyLoading.checked = data.lazyLoading;
+                if (cacheOptimization && data.cacheOptimization !== undefined) cacheOptimization.checked = data.cacheOptimization;
+                if (captchaStrength && data.captchaStrength) captchaStrength.value = data.captchaStrength;
+                if (loginAttemptLimit && data.loginAttemptLimit) loginAttemptLimit.value = data.loginAttemptLimit;
+                if (autoKeyRotation && data.autoKeyRotation !== undefined) autoKeyRotation.checked = data.autoKeyRotation;
             }
-        } catch (e) {
-            console.error("Error loading settings:", e)
+        } catch (error) {
+            console.error("Error loading settings:", error);
         }
     },
+    
     saveSettings: function() {
         try {
-            const e = {
-                lazyLoading: document.getElementById("lazyLoading").checked,
-                cacheOptimization: document.getElementById("cacheOptimization").checked,
-                captchaStrength: document.getElementById("captchaStrength").value,
-                loginAttemptLimit: parseInt(document.getElementById("loginAttemptLimit").value),
-                autoKeyRotation: document.getElementById("autoKeyRotation").checked,
-                savedAt: (new Date).toISOString()
+            const lazyLoading = document.getElementById("lazyLoading");
+            const cacheOptimization = document.getElementById("cacheOptimization");
+            const captchaStrength = document.getElementById("captchaStrength");
+            const loginAttemptLimit = document.getElementById("loginAttemptLimit");
+            const autoKeyRotation = document.getElementById("autoKeyRotation");
+            
+            if (!lazyLoading || !cacheOptimization || !captchaStrength || !loginAttemptLimit || !autoKeyRotation) {
+                return;
+            }
+            
+            const settings = {
+                lazyLoading: lazyLoading.checked,
+                cacheOptimization: cacheOptimization.checked,
+                captchaStrength: captchaStrength.value,
+                loginAttemptLimit: parseInt(loginAttemptLimit.value),
+                autoKeyRotation: autoKeyRotation.checked,
+                savedAt: (new Date()).toISOString()
             };
-            localStorage.setItem("app_settings", JSON.stringify(e));
-            this.applySettings(e);
+            
+            localStorage.setItem("app_settings", JSON.stringify(settings));
+            this.applySettings(settings);
             this.showSuccessMessage("Settings saved successfully!");
-            securityLog.add("SETTINGS_SAVED", e)
-        } catch (e) {
-            console.error("Error saving settings:", e);
-            alert("Error saving settings: " + e.message)
+            securityLog.add("SETTINGS_SAVED", settings);
+        } catch (error) {
+            console.error("Error saving settings:", error);
+            alert("Error saving settings: " + error.message);
         }
     },
+    
     resetSettings: function() {
         if (confirm("Are you sure you want to reset all settings to default?")) {
-            const e = {
-                lazyLoading: !0,
-                cacheOptimization: !0,
+            const defaultSettings = {
+                lazyLoading: true,
+                cacheOptimization: true,
                 captchaStrength: "high",
                 loginAttemptLimit: 5,
                 autoKeyRotation: true
             };
-            document.getElementById("lazyLoading").checked = e.lazyLoading;
-            document.getElementById("cacheOptimization").checked = e.cacheOptimization;
-            document.getElementById("captchaStrength").value = e.captchaStrength;
-            document.getElementById("loginAttemptLimit").value = e.loginAttemptLimit;
-            document.getElementById("autoKeyRotation").checked = e.autoKeyRotation;
+            
+            const lazyLoading = document.getElementById("lazyLoading");
+            const cacheOptimization = document.getElementById("cacheOptimization");
+            const captchaStrength = document.getElementById("captchaStrength");
+            const loginAttemptLimit = document.getElementById("loginAttemptLimit");
+            const autoKeyRotation = document.getElementById("autoKeyRotation");
+            
+            if (lazyLoading && cacheOptimization && captchaStrength && loginAttemptLimit && autoKeyRotation) {
+                lazyLoading.checked = defaultSettings.lazyLoading;
+                cacheOptimization.checked = defaultSettings.cacheOptimization;
+                captchaStrength.value = defaultSettings.captchaStrength;
+                loginAttemptLimit.value = defaultSettings.loginAttemptLimit;
+                autoKeyRotation.checked = defaultSettings.autoKeyRotation;
+            }
+            
             localStorage.removeItem("app_settings");
             this.showSuccessMessage("Settings reset to default!");
-            securityLog.add("SETTINGS_RESET", {})
+            securityLog.add("SETTINGS_RESET", {});
         }
     },
-    applySettings: function(e) {
-        document.querySelectorAll("img").forEach((t => {
-            t.loading = e.lazyLoading ? "lazy" : "eager"
-        }));
-        e.captchaStrength && (captchaSystem.setStrength(e.captchaStrength), captchaSystemRegistration.setStrength(e.captchaStrength));
-        e.loginAttemptLimit && (SECURITY_CONFIG.maxAttempts = e.loginAttemptLimit);
+    
+    applySettings: function(settings) {
+        // تطبيق إعدادات تحميل الصور
+        document.querySelectorAll("img").forEach(img => {
+            img.loading = settings.lazyLoading ? "lazy" : "eager";
+        });
         
-        if (e.autoKeyRotation) {
+        // تطبيق إعدادات CAPTCHA
+        if (settings.captchaStrength) {
+            captchaSystem.setStrength(settings.captchaStrength);
+            captchaSystemRegistration.setStrength(settings.captchaStrength);
+        }
+        
+        // تطبيق إعدادات محاولات الدخول
+        if (settings.loginAttemptLimit) {
+            SECURITY_CONFIG.maxAttempts = settings.loginAttemptLimit;
+        }
+        
+        // تطبيق إعدادات تدوير المفاتيح
+        if (settings.autoKeyRotation) {
             dynamicEncryptionSystem.setupKeyRotation();
         }
     },
-    openModal: function(e) {
-        this.currentUserRole = e;
-        document.getElementById("settingsModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        const t = document.querySelectorAll(".admin-only");
-        "admin" === e ? t.forEach((e => {
-            e.style.display = "block"
-        })) : t.forEach((e => {
-            e.style.display = "none"
-        }));
-        this.updateKeyStatus();
-        
-        securityLog.add("SETTINGS_MODAL_OPENED", {
-            userRole: e
-        })
+    
+    openModal: function(userRole) {
+        this.currentUserRole = userRole;
+        const modal = document.getElementById("settingsModal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            const adminOnlyElements = document.querySelectorAll(".admin-only");
+            if (userRole === "admin") {
+                adminOnlyElements.forEach(el => el.style.display = "block");
+            } else {
+                adminOnlyElements.forEach(el => el.style.display = "none");
+            }
+            this.updateKeyStatus();
+            securityLog.add("SETTINGS_MODAL_OPENED", { userRole: userRole });
+        }
     },
+    
     closeModal: function() {
-        document.getElementById("settingsModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("SETTINGS_MODAL_CLOSED", {})
+        const modal = document.getElementById("settingsModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("SETTINGS_MODAL_CLOSED", {});
     },
+    
     rotateEncryptionKey: function() {
         if (confirm("⚠️ تحذير: تدوير مفتاح التشفير سيتطلب من جميع المستخدمين إعادة تسجيل الدخول.\nهل أنت متأكد أنك تريد المتابعة؟")) {
             const newKey = encryption.rotateEncryptionKey();
@@ -3615,81 +3939,118 @@ const settingsSystem = {
             }
         }
     },
+    
     updateKeyStatus: function() {
         const keyInfo = dynamicEncryptionSystem.getKeyInfo();
-        document.getElementById("currentKeyHash").textContent = keyInfo.currentKeyHash ? 
-            keyInfo.currentKeyHash.substring(0, 12) + "..." : "N/A";
-        document.getElementById("keyHistoryCount").textContent = keyInfo.keyHistoryCount;
-        document.getElementById("lastKeyRotation").textContent = keyInfo.lastRotation ? 
-            new Date(keyInfo.lastRotation).toLocaleDateString() : "Never";
+        const currentKeyHash = document.getElementById("currentKeyHash");
+        const keyHistoryCount = document.getElementById("keyHistoryCount");
+        const lastKeyRotation = document.getElementById("lastKeyRotation");
+        
+        if (currentKeyHash) {
+            currentKeyHash.textContent = keyInfo.currentKeyHash ? 
+                keyInfo.currentKeyHash.substring(0, 12) + "..." : "N/A";
+        }
+        
+        if (keyHistoryCount) keyHistoryCount.textContent = keyInfo.keyHistoryCount;
+        if (lastKeyRotation) {
+            lastKeyRotation.textContent = keyInfo.lastRotation ? 
+                new Date(keyInfo.lastRotation).toLocaleDateString() : "Never";
+        }
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام إدارة باقات FreeMACs
+// ============================================
 
 const freemacsSystem = {
     currentUserRole: "user",
     packages: [],
+    
     init: function() {
         this.loadPackages();
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     loadPackages: function() {
         try {
-            const e = localStorage.getItem("freemacs_packages");
-            e ? this.packages = JSON.parse(e) : (this.packages = [], this.savePackages())
-        } catch (e) {
-            console.error("Error loading packages:", e);
-            this.packages = []
+            const packagesData = localStorage.getItem("freemacs_packages");
+            this.packages = packagesData ? JSON.parse(packagesData) : [];
+            this.savePackages();
+        } catch (error) {
+            console.error("Error loading packages:", error);
+            this.packages = [];
         }
     },
+    
     savePackages: function() {
         try {
             localStorage.setItem("freemacs_packages", JSON.stringify(this.packages));
             if (firebaseInitialized && db) {
                 syncToFirebase('freemacs_packages', this.packages);
             }
-        } catch (e) {
-            console.error("Error saving packages:", e)
+        } catch (error) {
+            console.error("Error saving packages:", error);
         }
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeFreemacs").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("freemacsModal").addEventListener("click", (e => {
-            e.target === document.getElementById("freemacsModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("freemacsModal").style.display && this.closeModal()
-        }))
+        const closeBtn = document.getElementById("closeFreemacs");
+        const modal = document.getElementById("freemacsModal");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
     },
-    openModal: function(e) {
-        this.currentUserRole = e;
+    
+    openModal: function(userRole) {
+        this.currentUserRole = userRole;
         this.renderPackages();
-        document.getElementById("freemacsModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("FREEMACS_MODAL_OPENED", {
-            userRole: e
-        })
+        const modal = document.getElementById("freemacsModal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+        }
+        securityLog.add("FREEMACS_MODAL_OPENED", { userRole: userRole });
     },
+    
     closeModal: function() {
-        document.getElementById("freemacsModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("FREEMACS_MODAL_CLOSED", {})
+        const modal = document.getElementById("freemacsModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("FREEMACS_MODAL_CLOSED", {});
     },
+    
     renderPackages: function() {
-        const e = document.getElementById("freemacsPackagesContainer");
-        if (e.innerHTML = "", 0 === this.packages.length) {
-            const t = document.createElement("div");
-            t.className = "package-card";
-            t.innerHTML = `
+        const container = document.getElementById("freemacsPackagesContainer");
+        if (!container) return;
+        
+        container.innerHTML = "";
+        
+        if (this.packages.length === 0) {
+            const noPackagesCard = document.createElement("div");
+            noPackagesCard.className = "package-card";
+            noPackagesCard.innerHTML = `
                 <div class="package-title">
                     <i class="fas fa-box-open"></i> No Packages Available
                 </div>
@@ -3697,131 +4058,142 @@ const freemacsSystem = {
                     No IPTV packages found. Add your first package!
                 </p>
             `;
-            e.appendChild(t)
+            container.appendChild(noPackagesCard);
         } else {
-            this.packages.forEach(((t, s) => {
-                const n = document.createElement("div");
-                n.className = "package-card";
-                n.innerHTML = `
+            this.packages.forEach((packageData, index) => {
+                const packageCard = document.createElement("div");
+                packageCard.className = "package-card";
+                packageCard.innerHTML = `
                     <div class="package-header">
-                        <div class="package-title">${t.name}</div>
-                        ${"admin"===this.currentUserRole||"moderator"===this.currentUserRole?`<div class="package-actions">
-                                <button class="icon-btn update-btn" data-index="${s}" data-type="freemacs" title="Update Package">
+                        <div class="package-title">${packageData.name}</div>
+                        ${this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? `
+                            <div class="package-actions">
+                                <button class="icon-btn update-btn" data-index="${index}" data-type="freemacs" title="Update Package">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="icon-btn delete-btn" data-index="${s}" data-type="freemacs" title="Delete Package">
+                                <button class="icon-btn delete-btn" data-index="${index}" data-type="freemacs" title="Delete Package">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                            </div>`:""}
+                            </div>` : ""}
                     </div>
                     <div class="server-info">
-                        <div class="server-url" data-url="${t.serverUrl}">
-                            ${t.serverUrl}
-                            <div class="copy-icon" data-text="${t.serverUrl}" title="Copy Server URL">
+                        <div class="server-url" data-url="${packageData.serverUrl}">
+                            ${packageData.serverUrl}
+                            <div class="copy-icon" data-text="${packageData.serverUrl}" title="Copy Server URL">
                                 <i class="fas fa-copy"></i>
                             </div>
                         </div>
-                        <div class="mac-address" data-mac="${t.macAddress}">
-                            ${t.macAddress}
-                            <div class="copy-icon" data-text="${t.macAddress}" title="Copy MAC Address">
+                        <div class="mac-address" data-mac="${packageData.macAddress}">
+                            ${packageData.macAddress}
+                            <div class="copy-icon" data-text="${packageData.macAddress}" title="Copy MAC Address">
                                 <i class="fas fa-copy"></i>
                             </div>
                         </div>
                     </div>
                 `;
-                e.appendChild(n)
-            }));
-            this.attachPackageEventListeners()
+                container.appendChild(packageCard);
+            });
+            
+            this.attachPackageEventListeners();
         }
-        if ("admin" === this.currentUserRole || "moderator" === this.currentUserRole) {
-            const t = document.createElement("button");
-            t.className = "add-portal-btn";
-            t.id = "addPortalBtn";
-            t.innerHTML = '<i class="fas fa-plus"></i> Add New Portal';
-            e.appendChild(t);
-            t.addEventListener("click", (() => {
-                addPortalSystem.openModal()
-            }))
-        } else {
-            const t = document.createElement("button");
-            t.className = "add-portal-btn disabled";
-            t.innerHTML = '<i class="fas fa-lock"></i> Add New Portal (Admin Only)';
-            e.appendChild(t)
+        
+        const addButton = document.createElement("button");
+        addButton.className = this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? 
+            "add-portal-btn" : "add-portal-btn disabled";
+        addButton.id = "addPortalBtn";
+        addButton.innerHTML = this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? 
+            '<i class="fas fa-plus"></i> Add New Portal' : 
+            '<i class="fas fa-lock"></i> Add New Portal (Admin Only)';
+        
+        if (this.currentUserRole === "admin" || this.currentUserRole === "moderator") {
+            addButton.addEventListener("click", () => addPortalSystem.openModal());
         }
+        
+        container.appendChild(addButton);
     },
+    
     attachPackageEventListeners: function() {
-        document.querySelectorAll(".copy-icon").forEach((e => {
-            e.addEventListener("click", (e => {
+        document.querySelectorAll(".copy-icon").forEach(icon => {
+            icon.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const t = e.target.getAttribute("data-text") || e.target.closest(".copy-icon").getAttribute("data-text");
-                this.copyToClipboard(t);
+                const text = e.target.getAttribute("data-text") || e.target.closest(".copy-icon").getAttribute("data-text");
+                this.copyToClipboard(text);
                 this.showSuccessMessage("Copied to clipboard!");
                 securityLog.add("COPY_ICON_CLICKED", {
-                    text: t,
+                    text: text,
                     userRole: this.currentUserRole,
                     type: "freemacs"
-                })
-            }))
-        }));
-        document.querySelectorAll('.update-btn[data-type="freemacs"]').forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".update-btn").getAttribute("data-index"));
-                const s = this.packages[t];
-                s && addPortalSystem.openModal(s, t)
-            }))
-        }));
-        document.querySelectorAll('.delete-btn[data-type="freemacs"]').forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
-                const s = this.packages[t];
-                s && deleteConfirmSystem.openModal(t, s, "freemacs")
-            }))
-        }))
+                });
+            });
+        });
+        
+        document.querySelectorAll('.update-btn[data-type="freemacs"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".update-btn").getAttribute("data-index"));
+                const packageData = this.packages[index];
+                packageData && addPortalSystem.openModal(packageData, index);
+            });
+        });
+        
+        document.querySelectorAll('.delete-btn[data-type="freemacs"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
+                const packageData = this.packages[index];
+                packageData && deleteConfirmSystem.openModal(index, packageData, "freemacs");
+            });
+        });
     },
-    addPackage: function(e) {
-        const t = {
+    
+    addPackage: function(packageData) {
+        const newPackage = {
             id: "package_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
-            name: e.name,
-            serverUrl: e.serverUrl,
-            macAddress: e.macAddress,
+            name: packageData.name,
+            serverUrl: packageData.serverUrl,
+            macAddress: packageData.macAddress,
             createdBy: this.currentUserRole,
-            createdAt: (new Date).toISOString()
+            createdAt: (new Date()).toISOString()
         };
-        this.packages.push(t);
+        
+        this.packages.push(newPackage);
         this.savePackages();
         this.renderPackages();
         securityLog.add("PACKAGE_ADDED", {
-            packageName: e.name,
+            packageName: packageData.name,
             createdBy: this.currentUserRole,
             type: "freemacs"
         });
-        return t
+        
+        return newPackage;
     },
-    updatePackage: function(e, t) {
-        if (e >= 0 && e < this.packages.length) {
-            this.packages[e] = {
-                ...this.packages[e],
-                name: t.name,
-                serverUrl: t.serverUrl,
-                macAddress: t.macAddress,
-                updatedAt: (new Date).toISOString()
+    
+    updatePackage: function(index, packageData) {
+        if (index >= 0 && index < this.packages.length) {
+            this.packages[index] = {
+                ...this.packages[index],
+                name: packageData.name,
+                serverUrl: packageData.serverUrl,
+                macAddress: packageData.macAddress,
+                updatedAt: (new Date()).toISOString()
             };
+            
             this.savePackages();
             this.renderPackages();
             securityLog.add("PACKAGE_UPDATED", {
-                index: e,
-                packageName: t.name,
+                index: index,
+                packageName: packageData.name,
                 userRole: this.currentUserRole,
                 type: "freemacs"
             });
-            return !0
+            
+            return true;
         }
-        return !1
+        return false;
     },
-    deletePackage: function(e) {
-        if (e >= 0 && e < this.packages.length) {
-            const packageToDelete = this.packages[e];
-            this.packages.splice(e, 1);
+    
+    deletePackage: function(index) {
+        if (index >= 0 && index < this.packages.length) {
+            const packageToDelete = this.packages[index];
+            this.packages.splice(index, 1);
             this.savePackages();
             this.renderPackages();
             this.showSuccessMessage("Package deleted successfully!");
@@ -3830,90 +4202,118 @@ const freemacsSystem = {
                 deleteFromFirebase('freemacs_packages', packageToDelete.id);
             }
             
-            return !0
+            return true;
         }
-        return !1
+        return false;
     },
-    copyToClipboard: function(e) {
-        navigator.clipboard.writeText(e).then((() => {
-            console.log("Text copied to clipboard:", e)
-        })).catch((t => {
-            console.error("Failed to copy text:", t);
-            const s = document.createElement("textarea");
-            s.value = e;
-            document.body.appendChild(s);
-            s.select();
+    
+    copyToClipboard: function(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            console.log("Text copied to clipboard:", text);
+        }).catch(error => {
+            console.error("Failed to copy text:", error);
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
             document.execCommand("copy");
-            document.body.removeChild(s)
-        }))
+            document.body.removeChild(textarea);
+        });
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام إدارة خوادم Xtream
+// ============================================
 
 const serverxtreamSystem = {
     currentUserRole: "user",
     servers: [],
+    
     init: function() {
         this.loadServers();
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     loadServers: function() {
         try {
-            const e = localStorage.getItem("serverxtream_servers");
-            e ? this.servers = JSON.parse(e) : (this.servers = [], this.saveServers())
-        } catch (e) {
-            console.error("Error loading servers:", e);
-            this.servers = []
+            const serversData = localStorage.getItem("serverxtream_servers");
+            this.servers = serversData ? JSON.parse(serversData) : [];
+            this.saveServers();
+        } catch (error) {
+            console.error("Error loading servers:", error);
+            this.servers = [];
         }
     },
+    
     saveServers: function() {
         try {
             localStorage.setItem("serverxtream_servers", JSON.stringify(this.servers));
             if (firebaseInitialized && db) {
                 syncToFirebase('xtream_servers', this.servers);
             }
-        } catch (e) {
-            console.error("Error saving servers:", e)
+        } catch (error) {
+            console.error("Error saving servers:", error);
         }
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeServerxtream").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("serverxtreamModal").addEventListener("click", (e => {
-            e.target === document.getElementById("serverxtreamModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("serverxtreamModal").style.display && this.closeModal()
-        }))
+        const closeBtn = document.getElementById("closeServerxtream");
+        const modal = document.getElementById("serverxtreamModal");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
     },
-    openModal: function(e) {
-        this.currentUserRole = e;
+    
+    openModal: function(userRole) {
+        this.currentUserRole = userRole;
         this.renderServers();
-        document.getElementById("serverxtreamModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("SERVER_XTREAM_MODAL_OPENED", {
-            userRole: e
-        })
+        const modal = document.getElementById("serverxtreamModal");
+        if (modal) {
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+        }
+        securityLog.add("SERVER_XTREAM_MODAL_OPENED", { userRole: userRole });
     },
+    
     closeModal: function() {
-        document.getElementById("serverxtreamModal").style.display = "none";
-        document.body.style.overflow = "auto";
-        securityLog.add("SERVER_XTREAM_MODAL_CLOSED", {})
+        const modal = document.getElementById("serverxtreamModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
+        securityLog.add("SERVER_XTREAM_MODAL_CLOSED", {});
     },
+    
     renderServers: function() {
-        const e = document.getElementById("serverxtreamPackagesContainer");
-        if (e.innerHTML = "", 0 === this.servers.length) {
-            const t = document.createElement("div");
-            t.className = "package-card";
-            t.innerHTML = `
+        const container = document.getElementById("serverxtreamPackagesContainer");
+        if (!container) return;
+        
+        container.innerHTML = "";
+        
+        if (this.servers.length === 0) {
+            const noServersCard = document.createElement("div");
+            noServersCard.className = "package-card";
+            noServersCard.innerHTML = `
                 <div class="package-title">
                     <i class="fas fa-server"></i> No Servers Available
                 </div>
@@ -3921,139 +4321,150 @@ const serverxtreamSystem = {
                     No Xtream servers found. Add your first server!
                 </p>
             `;
-            e.appendChild(t)
+            container.appendChild(noServersCard);
         } else {
-            this.servers.forEach(((t, s) => {
-                const n = document.createElement("div");
-                n.className = "package-card";
-                n.innerHTML = `
+            this.servers.forEach((server, index) => {
+                const serverCard = document.createElement("div");
+                serverCard.className = "package-card";
+                serverCard.innerHTML = `
                     <div class="package-header">
-                        <div class="package-title">${t.name}</div>
-                        ${"admin"===this.currentUserRole||"moderator"===this.currentUserRole?`<div class="server-actions">
-                                <button class="icon-btn update-btn" data-index="${s}" data-type="serverxtream" title="Update Server">
+                        <div class="package-title">${server.name}</div>
+                        ${this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? `
+                            <div class="server-actions">
+                                <button class="icon-btn update-btn" data-index="${index}" data-type="serverxtream" title="Update Server">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="icon-btn delete-btn" data-index="${s}" data-type="serverxtream" title="Delete Server">
+                                <button class="icon-btn delete-btn" data-index="${index}" data-type="serverxtream" title="Delete Server">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                            </div>`:""}
+                            </div>` : ""}
                     </div>
                     <div class="server-info">
-                        <div class="server-url" data-url="${t.serverUrl}">
-                            ${t.serverUrl}
-                            <div class="copy-icon" data-text="${t.serverUrl}" title="Copy Server URL">
+                        <div class="server-url" data-url="${server.serverUrl}">
+                            ${server.serverUrl}
+                            <div class="copy-icon" data-text="${server.serverUrl}" title="Copy Server URL">
                                 <i class="fas fa-copy"></i>
                             </div>
                         </div>
-                        <div class="username-display" data-username="${t.username}">
-                            <i class="fas fa-user"></i> ${t.username}
-                            <div class="copy-icon" data-text="${t.username}" title="Copy Username">
+                        <div class="username-display" data-username="${server.username}">
+                            <i class="fas fa-user"></i> ${server.username}
+                            <div class="copy-icon" data-text="${server.username}" title="Copy Username">
                                 <i class="fas fa-copy"></i>
                             </div>
                         </div>
-                        <div class="password-display" data-password="${t.password}">
-                            <i class="fas fa-key"></i> ${t.password}
-                            <div class="copy-icon" data-text="${t.password}" title="Copy Password">
+                        <div class="password-display" data-password="${server.password}">
+                            <i class="fas fa-key"></i> ${server.password}
+                            <div class="copy-icon" data-text="${server.password}" title="Copy Password">
                                 <i class="fas fa-copy"></i>
                             </div>
                         </div>
                     </div>
                 `;
-                e.appendChild(n)
-            }));
-            this.attachServerEventListeners()
+                container.appendChild(serverCard);
+            });
+            
+            this.attachServerEventListeners();
         }
-        if ("admin" === this.currentUserRole || "moderator" === this.currentUserRole) {
-            const t = document.createElement("button");
-            t.className = "add-portal-btn";
-            t.id = "addServerBtn";
-            t.innerHTML = '<i class="fas fa-plus"></i> Add New Server';
-            e.appendChild(t);
-            t.addEventListener("click", (() => {
-                addServerSystem.openModal()
-            }))
-        } else {
-            const t = document.createElement("button");
-            t.className = "add-portal-btn disabled";
-            t.innerHTML = '<i class="fas fa-lock"></i> Add New Server (Admin Only)';
-            e.appendChild(t)
+        
+        const addButton = document.createElement("button");
+        addButton.className = this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? 
+            "add-portal-btn" : "add-portal-btn disabled";
+        addButton.id = "addServerBtn";
+        addButton.innerHTML = this.currentUserRole === "admin" || this.currentUserRole === "moderator" ? 
+            '<i class="fas fa-plus"></i> Add New Server' : 
+            '<i class="fas fa-lock"></i> Add New Server (Admin Only)';
+        
+        if (this.currentUserRole === "admin" || this.currentUserRole === "moderator") {
+            addButton.addEventListener("click", () => addServerSystem.openModal());
         }
+        
+        container.appendChild(addButton);
     },
+    
     attachServerEventListeners: function() {
-        document.querySelectorAll(".copy-icon").forEach((e => {
-            e.addEventListener("click", (e => {
+        document.querySelectorAll(".copy-icon").forEach(icon => {
+            icon.addEventListener("click", (e) => {
                 e.stopPropagation();
-                const t = e.target.getAttribute("data-text") || e.target.closest(".copy-icon").getAttribute("data-text");
-                this.copyToClipboard(t);
+                const text = e.target.getAttribute("data-text") || e.target.closest(".copy-icon").getAttribute("data-text");
+                this.copyToClipboard(text);
                 this.showSuccessMessage("Copied to clipboard!");
                 securityLog.add("COPY_ICON_CLICKED", {
-                    text: t,
+                    text: text,
                     userRole: this.currentUserRole,
                     type: "serverxtream"
-                })
-            }))
-        }));
-        document.querySelectorAll('.update-btn[data-type="serverxtream"]').forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".update-btn").getAttribute("data-index"));
-                const s = this.servers[t];
-                s && addServerSystem.openModal(s, t)
-            }))
-        }));
-        document.querySelectorAll('.delete-btn[data-type="serverxtream"]').forEach((e => {
-            e.addEventListener("click", (e => {
-                const t = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
-                const s = this.servers[t];
-                s && deleteServerConfirmSystem.openModal(t, s)
-            }))
-        }))
+                });
+            });
+        });
+        
+        document.querySelectorAll('.update-btn[data-type="serverxtream"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".update-btn").getAttribute("data-index"));
+                const server = this.servers[index];
+                server && addServerSystem.openModal(server, index);
+            });
+        });
+        
+        document.querySelectorAll('.delete-btn[data-type="serverxtream"]').forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const index = parseInt(e.target.getAttribute("data-index") || e.target.closest(".delete-btn").getAttribute("data-index"));
+                const server = this.servers[index];
+                server && deleteServerConfirmSystem.openModal(index, server);
+            });
+        });
     },
-    addServer: function(e) {
-        const t = {
+    
+    addServer: function(serverData) {
+        const newServer = {
             id: "server_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9),
-            name: e.name,
-            serverUrl: e.serverUrl,
-            username: e.username,
-            password: e.password,
+            name: serverData.name,
+            serverUrl: serverData.serverUrl,
+            username: serverData.username,
+            password: serverData.password,
             createdBy: this.currentUserRole,
-            createdAt: (new Date).toISOString()
+            createdAt: (new Date()).toISOString()
         };
-        this.servers.push(t);
+        
+        this.servers.push(newServer);
         this.saveServers();
         this.renderServers();
         securityLog.add("SERVER_ADDED", {
-            serverName: e.name,
+            serverName: serverData.name,
             createdBy: this.currentUserRole,
             type: "serverxtream"
         });
-        return t
+        
+        return newServer;
     },
-    updateServer: function(e, t) {
-        if (e >= 0 && e < this.servers.length) {
-            this.servers[e] = {
-                ...this.servers[e],
-                name: t.name,
-                serverUrl: t.serverUrl,
-                username: t.username,
-                password: t.password,
-                updatedAt: (new Date).toISOString()
+    
+    updateServer: function(index, serverData) {
+        if (index >= 0 && index < this.servers.length) {
+            this.servers[index] = {
+                ...this.servers[index],
+                name: serverData.name,
+                serverUrl: serverData.serverUrl,
+                username: serverData.username,
+                password: serverData.password,
+                updatedAt: (new Date()).toISOString()
             };
+            
             this.saveServers();
             this.renderServers();
             securityLog.add("SERVER_UPDATED", {
-                index: e,
-                serverName: t.name,
+                index: index,
+                serverName: serverData.name,
                 userRole: this.currentUserRole,
                 type: "serverxtream"
             });
-            return !0
+            
+            return true;
         }
-        return !1
+        return false;
     },
-    deleteServer: function(e) {
-        if (e >= 0 && e < this.servers.length) {
-            const serverToDelete = this.servers[e];
-            this.servers.splice(e, 1);
+    
+    deleteServer: function(index) {
+        if (index >= 0 && index < this.servers.length) {
+            const serverToDelete = this.servers[index];
+            this.servers.splice(index, 1);
             this.saveServers();
             this.renderServers();
             this.showSuccessMessage("Server deleted successfully!");
@@ -4062,53 +4473,68 @@ const serverxtreamSystem = {
                 deleteFromFirebase('xtream_servers', serverToDelete.id);
             }
             
-            return !0
+            return true;
         }
-        return !1
+        return false;
     },
-    copyToClipboard: function(e) {
-        navigator.clipboard.writeText(e).then((() => {
-            console.log("Text copied to clipboard:", e)
-        })).catch((t => {
-            console.error("Failed to copy text:", t);
-            const s = document.createElement("textarea");
-            s.value = e;
-            document.body.appendChild(s);
-            s.select();
+    
+    copyToClipboard: function(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            console.log("Text copied to clipboard:", text);
+        }).catch(error => {
+            console.error("Failed to copy text:", error);
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
             document.execCommand("copy");
-            document.body.removeChild(s)
-        }))
+            document.body.removeChild(textarea);
+        });
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام إضافة البوابة الجديدة
+// ============================================
 
 const addPortalSystem = {
     currentPackageIndex: null,
     currentPackageData: null,
+    
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeAddportal").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("cancelAddportal").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("addportalModal").addEventListener("click", (e => {
-            e.target === document.getElementById("addportalModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("addportalModal").style.display && this.closeModal()
-        }));
-        document.getElementById("addPortalForm").addEventListener("submit", (e => {
+        const closeBtn = document.getElementById("closeAddportal");
+        const cancelBtn = document.getElementById("cancelAddportal");
+        const modal = document.getElementById("addportalModal");
+        const form = document.getElementById("addPortalForm");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
+        
+        form && form.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -4116,38 +4542,61 @@ const addPortalSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }))
+        });
     },
-    openModal: function(e = null, t = null) {
-        this.currentPackageIndex = t;
-        this.currentPackageData = e;
-        document.getElementById("addportalModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        document.getElementById("addPortalForm").reset();
-        e ? (document.getElementById("packageName").value = e.name, document.getElementById("serverUrl").value = e.serverUrl, document.getElementById("macAddress").value = e.macAddress, document.querySelector(".save-portal-btn").innerHTML = '<i class="fas fa-save"></i> UPDATE PORTAL') : document.querySelector(".save-portal-btn").innerHTML = '<i class="fas fa-save"></i> SAVE PORTAL';
-        securityLog.add("ADD_PORTAL_MODAL_OPENED", {
-            mode: e ? "update" : "add"
-        })
+    
+    openModal: function(packageData = null, index = null) {
+        this.currentPackageIndex = index;
+        this.currentPackageData = packageData;
+        const modal = document.getElementById("addportalModal");
+        const form = document.getElementById("addPortalForm");
+        const saveBtn = document.querySelector(".save-portal-btn");
+        
+        if (modal && form && saveBtn) {
+            form.reset();
+            if (packageData) {
+                document.getElementById("packageName").value = packageData.name;
+                document.getElementById("serverUrl").value = packageData.serverUrl;
+                document.getElementById("macAddress").value = packageData.macAddress;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> UPDATE PORTAL';
+            } else {
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> SAVE PORTAL';
+            }
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("ADD_PORTAL_MODAL_OPENED", { mode: packageData ? "update" : "add" });
+        }
     },
+    
     closeModal: function() {
-        document.getElementById("addportalModal").style.display = "none";
-        document.body.style.overflow = "auto";
+        const modal = document.getElementById("addportalModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
         this.currentPackageIndex = null;
         this.currentPackageData = null;
-        securityLog.add("ADD_PORTAL_MODAL_CLOSED", {})
+        securityLog.add("ADD_PORTAL_MODAL_CLOSED", {});
     },
+    
     addNewPortal: function() {
-        const e = document.getElementById("packageName").value.trim();
-        const t = document.getElementById("serverUrl").value.trim();
-        const s = document.getElementById("macAddress").value.trim();
+        const nameInput = document.getElementById("packageName");
+        const serverUrlInput = document.getElementById("serverUrl");
+        const macAddressInput = document.getElementById("macAddress");
         
-        const sanitizedName = SQL_INJECTION_PROTECTION.sanitizeInput(e);
-        const sanitizedServerUrl = SQL_INJECTION_PROTECTION.sanitizeInput(t);
-        const sanitizedMacAddress = SQL_INJECTION_PROTECTION.sanitizeInput(s);
+        if (!nameInput || !serverUrlInput || !macAddressInput) return;
         
-        const nameValidation = SQL_INJECTION_PROTECTION.validateForInjection(e);
-        const serverValidation = SQL_INJECTION_PROTECTION.validateForInjection(t);
-        const macValidation = SQL_INJECTION_PROTECTION.validateForInjection(s);
+        const name = nameInput.value.trim();
+        const serverUrl = serverUrlInput.value.trim();
+        const macAddress = macAddressInput.value.trim();
+        
+        const sanitizedName = SQL_INJECTION_PROTECTION.sanitizeInput(name);
+        const sanitizedServerUrl = SQL_INJECTION_PROTECTION.sanitizeInput(serverUrl);
+        const sanitizedMacAddress = SQL_INJECTION_PROTECTION.sanitizeInput(macAddress);
+        
+        const nameValidation = SQL_INJECTION_PROTECTION.validateForInjection(name);
+        const serverValidation = SQL_INJECTION_PROTECTION.validateForInjection(serverUrl);
+        const macValidation = SQL_INJECTION_PROTECTION.validateForInjection(macAddress);
         
         if (!nameValidation.valid) {
             alert(nameValidation.message);
@@ -4164,53 +4613,81 @@ const addPortalSystem = {
             return;
         }
         
-        if (!sanitizedName || !sanitizedServerUrl || !sanitizedMacAddress) return void alert("Please fill in all fields");
-        if (!/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(sanitizedMacAddress)) return void alert("Please enter a valid MAC address (format: 00:1A:79:XX:XX:XX)");
-        if (!/^(http|https):\/\/[^ "]+$/.test(sanitizedServerUrl)) return void alert("Please enter a valid server URL");
-        const n = {
+        if (!sanitizedName || !sanitizedServerUrl || !sanitizedMacAddress) {
+            alert("Please fill in all fields");
+            return;
+        }
+        
+        if (!/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(sanitizedMacAddress)) {
+            alert("Please enter a valid MAC address (format: 00:1A:79:XX:XX:XX)");
+            return;
+        }
+        
+        if (!/^(http|https):\/\/[^ "]+$/.test(sanitizedServerUrl)) {
+            alert("Please enter a valid server URL");
+            return;
+        }
+        
+        const packageData = {
             name: sanitizedName,
             serverUrl: sanitizedServerUrl,
             macAddress: sanitizedMacAddress
         };
-        if (null !== this.currentPackageIndex && this.currentPackageData) {
-            freemacsSystem.updatePackage(this.currentPackageIndex, n);
-            this.showSuccessMessage(`Package "${sanitizedName}" updated successfully!`)
+        
+        if (this.currentPackageIndex !== null && this.currentPackageData) {
+            freemacsSystem.updatePackage(this.currentPackageIndex, packageData);
+            this.showSuccessMessage(`Package "${sanitizedName}" updated successfully!`);
         } else {
-            freemacsSystem.addPackage(n);
-            this.showSuccessMessage(`Package "${sanitizedName}" added successfully!`)
+            freemacsSystem.addPackage(packageData);
+            this.showSuccessMessage(`Package "${sanitizedName}" added successfully!`);
         }
-        this.closeModal()
+        
+        this.closeModal();
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام إضافة الخادم الجديد
+// ============================================
 
 const addServerSystem = {
     currentServerIndex: null,
     currentServerData: null,
+    
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeAddserver").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("cancelAddserver").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("addserverModal").addEventListener("click", (e => {
-            e.target === document.getElementById("addserverModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("addserverModal").style.display && this.closeModal()
-        }));
-        document.getElementById("addServerForm").addEventListener("submit", (e => {
+        const closeBtn = document.getElementById("closeAddserver");
+        const cancelBtn = document.getElementById("cancelAddserver");
+        const modal = document.getElementById("addserverModal");
+        const form = document.getElementById("addServerForm");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeModal());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
+        
+        form && form.addEventListener("submit", (e) => {
             e.preventDefault();
             try {
                 CSRF_SYSTEM.validateFormSubmission(e.target);
@@ -4218,42 +4695,67 @@ const addServerSystem = {
             } catch (error) {
                 alert(error.message);
             }
-        }))
+        });
     },
-    openModal: function(e = null, t = null) {
-        this.currentServerIndex = t;
-        this.currentServerData = e;
-        document.getElementById("addserverModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        document.getElementById("addServerForm").reset();
-        e ? (document.getElementById("serverName").value = e.name, document.getElementById("xtreamServerUrl").value = e.serverUrl, document.getElementById("xtreamUsername").value = e.username, document.getElementById("xtreamPassword").value = e.password, document.querySelector(".save-server-btn").innerHTML = '<i class="fas fa-save"></i> UPDATE SERVER') : document.querySelector(".save-server-btn").innerHTML = '<i class="fas fa-save"></i> SAVE SERVER';
-        securityLog.add("ADD_SERVER_MODAL_OPENED", {
-            mode: e ? "update" : "add"
-        })
+    
+    openModal: function(serverData = null, index = null) {
+        this.currentServerIndex = index;
+        this.currentServerData = serverData;
+        const modal = document.getElementById("addserverModal");
+        const form = document.getElementById("addServerForm");
+        const saveBtn = document.querySelector(".save-server-btn");
+        
+        if (modal && form && saveBtn) {
+            form.reset();
+            if (serverData) {
+                document.getElementById("serverName").value = serverData.name;
+                document.getElementById("xtreamServerUrl").value = serverData.serverUrl;
+                document.getElementById("xtreamUsername").value = serverData.username;
+                document.getElementById("xtreamPassword").value = serverData.password;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> UPDATE SERVER';
+            } else {
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> SAVE SERVER';
+            }
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("ADD_SERVER_MODAL_OPENED", { mode: serverData ? "update" : "add" });
+        }
     },
+    
     closeModal: function() {
-        document.getElementById("addserverModal").style.display = "none";
-        document.body.style.overflow = "auto";
+        const modal = document.getElementById("addserverModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
         this.currentServerIndex = null;
         this.currentServerData = null;
-        securityLog.add("ADD_SERVER_MODAL_CLOSED", {})
+        securityLog.add("ADD_SERVER_MODAL_CLOSED", {});
     },
+    
     addNewServer: function() {
-        const e = document.getElementById("serverName").value.trim();
-        const t = document.getElementById("xtreamServerUrl").value.trim();
-        const s = document.getElementById("xtreamUsername").value.trim();
-        const n = document.getElementById("xtreamPassword").value.trim();
+        const nameInput = document.getElementById("serverName");
+        const serverUrlInput = document.getElementById("xtreamServerUrl");
+        const usernameInput = document.getElementById("xtreamUsername");
+        const passwordInput = document.getElementById("xtreamPassword");
         
-        const sanitizedName = SQL_INJECTION_PROTECTION.sanitizeInput(e);
-        const sanitizedServerUrl = SQL_INJECTION_PROTECTION.sanitizeInput(t);
-        const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(s);
-        const sanitizedPassword = SQL_INJECTION_PROTECTION.sanitizeInput(n);
+        if (!nameInput || !serverUrlInput || !usernameInput || !passwordInput) return;
+        
+        const name = nameInput.value.trim();
+        const serverUrl = serverUrlInput.value.trim();
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value.trim();
+        
+        const sanitizedName = SQL_INJECTION_PROTECTION.sanitizeInput(name);
+        const sanitizedServerUrl = SQL_INJECTION_PROTECTION.sanitizeInput(serverUrl);
+        const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
+        const sanitizedPassword = SQL_INJECTION_PROTECTION.sanitizeInput(password);
         
         const validations = [
-            SQL_INJECTION_PROTECTION.validateForInjection(e),
-            SQL_INJECTION_PROTECTION.validateForInjection(t),
-            SQL_INJECTION_PROTECTION.validateForInjection(s),
-            SQL_INJECTION_PROTECTION.validateForInjection(n)
+            SQL_INJECTION_PROTECTION.validateForInjection(name),
+            SQL_INJECTION_PROTECTION.validateForInjection(serverUrl),
+            SQL_INJECTION_PROTECTION.validateForInjection(username),
+            SQL_INJECTION_PROTECTION.validateForInjection(password)
         ];
         
         for (const validation of validations) {
@@ -4263,261 +4765,351 @@ const addServerSystem = {
             }
         }
         
-        if (!(sanitizedName && sanitizedServerUrl && sanitizedUsername && sanitizedPassword)) return void alert("Please fill in all fields");
-        if (!/^(http|https):\/\/[^ "]+$/.test(sanitizedServerUrl)) return void alert("Please enter a valid server URL (e.g., http://premiumiptv.com:80)");
-        const a = {
+        if (!sanitizedName || !sanitizedServerUrl || !sanitizedUsername || !sanitizedPassword) {
+            alert("Please fill in all fields");
+            return;
+        }
+        
+        if (!/^(http|https):\/\/[^ "]+$/.test(sanitizedServerUrl)) {
+            alert("Please enter a valid server URL (e.g., http://premiumiptv.com:80)");
+            return;
+        }
+        
+        const serverData = {
             name: sanitizedName,
             serverUrl: sanitizedServerUrl,
             username: sanitizedUsername,
             password: sanitizedPassword
         };
-        if (null !== this.currentServerIndex && this.currentServerData) {
-            serverxtreamSystem.updateServer(this.currentServerIndex, a);
-            this.showSuccessMessage(`Server "${sanitizedName}" updated successfully!`)
+        
+        if (this.currentServerIndex !== null && this.currentServerData) {
+            serverxtreamSystem.updateServer(this.currentServerIndex, serverData);
+            this.showSuccessMessage(`Server "${sanitizedName}" updated successfully!`);
         } else {
-            serverxtreamSystem.addServer(a);
-            this.showSuccessMessage(`Server "${sanitizedName}" added successfully!`)
+            serverxtreamSystem.addServer(serverData);
+            this.showSuccessMessage(`Server "${sanitizedName}" added successfully!`);
         }
-        this.closeModal()
+        
+        this.closeModal();
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام تأكيد الحذف للباقات
+// ============================================
 
 const deleteConfirmSystem = {
     currentIndex: null,
     currentPackage: null,
     currentType: null,
+    
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeDeleteConfirm").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("cancelDelete").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("confirmDelete").addEventListener("click", (() => {
-            this.executeDelete()
-        }));
-        document.getElementById("deleteConfirmModal").addEventListener("click", (e => {
-            e.target === document.getElementById("deleteConfirmModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("deleteConfirmModal").style.display && this.closeModal()
-        }))
+        const closeBtn = document.getElementById("closeDeleteConfirm");
+        const cancelBtn = document.getElementById("cancelDelete");
+        const confirmBtn = document.getElementById("confirmDelete");
+        const modal = document.getElementById("deleteConfirmModal");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeModal());
+        confirmBtn && confirmBtn.addEventListener("click", () => this.executeDelete());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
     },
-    openModal: function(e, t, s = "freemacs") {
-        this.currentIndex = e;
-        this.currentPackage = t;
-        this.currentType = s;
-        const n = document.getElementById("deletePackageInfo");
-        "freemacs" === s && (n.innerHTML = `<div class="package-name"><i class="fas fa-gift"></i> ${t.name}</div>
-                <div class="package-details">
-                    <div class="package-detail">
-                        <i class="fas fa-server"></i>
-                        <span>Server URL:</span>
-                        <span class="detail-value">${t.serverUrl}</span>
+    
+    openModal: function(index, packageData, type = "freemacs") {
+        this.currentIndex = index;
+        this.currentPackage = packageData;
+        this.currentType = type;
+        const infoDiv = document.getElementById("deletePackageInfo");
+        const modal = document.getElementById("deleteConfirmModal");
+        
+        if (infoDiv && modal) {
+            if (type === "freemacs") {
+                infoDiv.innerHTML = `
+                    <div class="package-name"><i class="fas fa-gift"></i> ${packageData.name}</div>
+                    <div class="package-details">
+                        <div class="package-detail">
+                            <i class="fas fa-server"></i>
+                            <span>Server URL:</span>
+                            <span class="detail-value">${packageData.serverUrl}</span>
+                        </div>
+                        <div class="package-detail">
+                            <i class="fas fa-key"></i>
+                            <span>MAC Address:</span>
+                            <span class="detail-value">${packageData.macAddress}</span>
+                        </div>
+                        <div class="package-detail">
+                            <i class="fas fa-user"></i>
+                            <span>Created By:</span>
+                            <span class="detail-value">${packageData.createdBy || "admin"}</span>
+                        </div>
+                        <div class="package-detail">
+                            <i class="fas fa-calendar"></i>
+                            <span>Created At:</span>
+                            <span class="detail-value">${new Date(packageData.createdAt).toLocaleDateString()}</span>
+                        </div>
                     </div>
-                    <div class="package-detail">
-                        <i class="fas fa-key"></i>
-                        <span>MAC Address:</span>
-                        <span class="detail-value">${t.macAddress}</span>
-                    </div>
-                    <div class="package-detail">
-                        <i class="fas fa-user"></i>
-                        <span>Created By:</span>
-                        <span class="detail-value">${t.createdBy||"admin"}</span>
-                    </div>
-                    <div class="package-detail">
-                        <i class="fas fa-calendar"></i>
-                        <span>Created At:</span>
-                        <span class="detail-value">${new Date(t.createdAt).toLocaleDateString()}</span>
-                    </div>
-                </div>`);
-        document.getElementById("deleteConfirmModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("DELETE_CONFIRM_MODAL_OPENED", {
-            packageName: t.name,
-            index: e,
-            type: s
-        })
+                `;
+            }
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("DELETE_CONFIRM_MODAL_OPENED", {
+                packageName: packageData.name,
+                index: index,
+                type: type
+            });
+        }
     },
+    
     closeModal: function() {
-        document.getElementById("deleteConfirmModal").style.display = "none";
-        document.body.style.overflow = "auto";
+        const modal = document.getElementById("deleteConfirmModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
         this.currentIndex = null;
         this.currentPackage = null;
         this.currentType = null;
-        securityLog.add("DELETE_CONFIRM_MODAL_CLOSED", {})
+        securityLog.add("DELETE_CONFIRM_MODAL_CLOSED", {});
     },
+    
     executeDelete: function() {
-        if (null !== this.currentIndex && this.currentPackage) {
-            let e = !1;
-            "freemacs" === this.currentType && (e = freemacsSystem.deletePackage(this.currentIndex));
-            e && (securityLog.add("PACKAGE_DELETED_CONFIRMED", {
-                index: this.currentIndex,
-                packageName: this.currentPackage.name,
-                type: this.currentType
-            }), this.showSuccessMessage(`Package "${this.currentPackage.name}" deleted successfully!`))
+        if (this.currentIndex !== null && this.currentPackage) {
+            let deleted = false;
+            if (this.currentType === "freemacs") {
+                deleted = freemacsSystem.deletePackage(this.currentIndex);
+            }
+            
+            if (deleted) {
+                securityLog.add("PACKAGE_DELETED_CONFIRMED", {
+                    index: this.currentIndex,
+                    packageName: this.currentPackage.name,
+                    type: this.currentType
+                });
+                this.showSuccessMessage(`Package "${this.currentPackage.name}" deleted successfully!`);
+            }
         }
-        this.closeModal()
+        this.closeModal();
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// نظام تأكيد حذف الخوادم
+// ============================================
 
 const deleteServerConfirmSystem = {
     currentIndex: null,
     currentServer: null,
+    
     init: function() {
-        this.setupEventListeners()
+        this.setupEventListeners();
     },
+    
     setupEventListeners: function() {
-        document.getElementById("closeDeleteServerConfirm").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("cancelDeleteServer").addEventListener("click", (() => {
-            this.closeModal()
-        }));
-        document.getElementById("confirmDeleteServer").addEventListener("click", (() => {
-            this.executeDelete()
-        }));
-        document.getElementById("deleteServerConfirmModal").addEventListener("click", (e => {
-            e.target === document.getElementById("deleteServerConfirmModal") && this.closeModal()
-        }));
-        document.addEventListener("keydown", (e => {
-            "Escape" === e.key && "flex" === document.getElementById("deleteServerConfirmModal").style.display && this.closeModal()
-        }))
+        const closeBtn = document.getElementById("closeDeleteServerConfirm");
+        const cancelBtn = document.getElementById("cancelDeleteServer");
+        const confirmBtn = document.getElementById("confirmDeleteServer");
+        const modal = document.getElementById("deleteServerConfirmModal");
+        
+        closeBtn && closeBtn.addEventListener("click", () => this.closeModal());
+        cancelBtn && cancelBtn.addEventListener("click", () => this.closeModal());
+        confirmBtn && confirmBtn.addEventListener("click", () => this.executeDelete());
+        modal && modal.addEventListener("click", (e) => {
+            e.target === modal && this.closeModal();
+        });
+        
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && modal.style.display === "flex") {
+                this.closeModal();
+            }
+        });
     },
-    openModal: function(e, t) {
-        this.currentIndex = e;
-        this.currentServer = t;
-        document.getElementById("deleteServerInfo").innerHTML = `
-            <div class="package-name"><i class="fas fa-server"></i> ${t.name}</div>
-            <div class="package-details">
-                <div class="package-detail">
-                    <i class="fas fa-server"></i>
-                    <span>Server URL:</span>
-                    <span class="detail-value">${t.serverUrl}</span>
+    
+    openModal: function(index, server) {
+        this.currentIndex = index;
+        this.currentServer = server;
+        const infoDiv = document.getElementById("deleteServerInfo");
+        const modal = document.getElementById("deleteServerConfirmModal");
+        
+        if (infoDiv && modal) {
+            infoDiv.innerHTML = `
+                <div class="package-name"><i class="fas fa-server"></i> ${server.name}</div>
+                <div class="package-details">
+                    <div class="package-detail">
+                        <i class="fas fa-server"></i>
+                        <span>Server URL:</span>
+                        <span class="detail-value">${server.serverUrl}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-user"></i>
+                        <span>Username:</span>
+                        <span class="detail-value">${server.username}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-key"></i>
+                        <span>Password:</span>
+                        <span class="detail-value">${server.password}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-user"></i>
+                        <span>Created By:</span>
+                        <span class="detail-value">${server.createdBy || "admin"}</span>
+                    </div>
+                    <div class="package-detail">
+                        <i class="fas fa-calendar"></i>
+                        <span>Created At:</span>
+                        <span class="detail-value">${new Date(server.createdAt).toLocaleDateString()}</span>
+                    </div>
                 </div>
-                <div class="package-detail">
-                    <i class="fas fa-user"></i>
-                    <span>Username:</span>
-                    <span class="detail-value">${t.username}</span>
-                </div>
-                <div class="package-detail">
-                    <i class="fas fa-key"></i>
-                    <span>Password:</span>
-                    <span class="detail-value">${t.password}</span>
-                </div>
-                <div class="package-detail">
-                    <i class="fas fa-user"></i>
-                    <span>Created By:</span>
-                    <span class="detail-value">${t.createdBy||"admin"}</span>
-                </div>
-                <div class="package-detail">
-                    <i class="fas fa-calendar"></i>
-                    <span>Created At:</span>
-                    <span class="detail-value">${new Date(t.createdAt).toLocaleDateString()}</span>
-                </div>
-            </div>
-        `;
-        document.getElementById("deleteServerConfirmModal").style.display = "flex";
-        document.body.style.overflow = "hidden";
-        securityLog.add("DELETE_SERVER_CONFIRM_MODAL_OPENED", {
-            serverName: t.name,
-            index: e
-        })
+            `;
+            modal.style.display = "flex";
+            document.body.style.overflow = "hidden";
+            securityLog.add("DELETE_SERVER_CONFIRM_MODAL_OPENED", {
+                serverName: server.name,
+                index: index
+            });
+        }
     },
+    
     closeModal: function() {
-        document.getElementById("deleteServerConfirmModal").style.display = "none";
-        document.body.style.overflow = "auto";
+        const modal = document.getElementById("deleteServerConfirmModal");
+        if (modal) {
+            modal.style.display = "none";
+            document.body.style.overflow = "auto";
+        }
         this.currentIndex = null;
         this.currentServer = null;
-        securityLog.add("DELETE_SERVER_CONFIRM_MODAL_CLOSED", {})
+        securityLog.add("DELETE_SERVER_CONFIRM_MODAL_CLOSED", {});
     },
+    
     executeDelete: function() {
-        if (null !== this.currentIndex && this.currentServer) {
-            serverxtreamSystem.deleteServer(this.currentIndex) && (securityLog.add("SERVER_DELETED_CONFIRMED", {
-                index: this.currentIndex,
-                serverName: this.currentServer.name
-            }), this.showSuccessMessage(`Server "${this.currentServer.name}" deleted successfully!`))
+        if (this.currentIndex !== null && this.currentServer) {
+            const deleted = serverxtreamSystem.deleteServer(this.currentIndex);
+            if (deleted) {
+                securityLog.add("SERVER_DELETED_CONFIRMED", {
+                    index: this.currentIndex,
+                    serverName: this.currentServer.name
+                });
+                this.showSuccessMessage(`Server "${this.currentServer.name}" deleted successfully!`);
+            }
         }
-        this.closeModal()
+        this.closeModal();
     },
-    showSuccessMessage: function(e) {
-        const t = document.getElementById("copySuccess");
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+    
+    showSuccessMessage: function(message) {
+        const copySuccess = document.getElementById("copySuccess");
+        if (copySuccess) {
+            copySuccess.querySelector("span").textContent = message;
+            copySuccess.style.display = "flex";
+            setTimeout(() => {
+                copySuccess.style.display = "none";
+            }, 3000);
+        }
     }
 };
+
+// ============================================
+// إعدادات الأمان
+// ============================================
 
 const SECURITY_CONFIG = {
     maxAttempts: 5,
     blockTime: 900000,
     passwordMinLength: 8,
-    requireComplexPassword: !0,
+    requireComplexPassword: true,
     sessionTimeout: 1800000,
-    csrfEnabled: !0,
-    loggingEnabled: !0,
-    injectionProtection: !0,
-    httpsCookiesEnabled: !0
+    csrfEnabled: true,
+    loggingEnabled: true,
+    injectionProtection: true,
+    httpsCookiesEnabled: true
 };
 
 const securityLog = {
     logs: [],
-    add: function(e, t) {
+    
+    add: function(event, details) {
         if (!SECURITY_CONFIG.loggingEnabled) return;
-        const s = {
-            timestamp: (new Date).toISOString(),
-            event: e,
-            details: t,
+        
+        const logEntry = {
+            timestamp: (new Date()).toISOString(),
+            event: event,
+            details: details,
             ip: this.getUserFingerprint(),
             userAgent: navigator.userAgent
         };
-        this.logs.push(s);
-        const n = document.getElementById("securityLog");
-        if (n) {
-            const s = `[${(new Date).toLocaleTimeString()}] ${e}: ${JSON.stringify(t)}`;
-            n.innerHTML = s + "<br>" + n.innerHTML
+        
+        this.logs.push(logEntry);
+        
+        const logElement = document.getElementById("securityLog");
+        if (logElement) {
+            const logMessage = `[${(new Date()).toLocaleTimeString()}] ${event}: ${JSON.stringify(details)}`;
+            logElement.innerHTML = logMessage + "<br>" + logElement.innerHTML;
         }
+        
         this.saveToStorage();
-        console.log(`🔒 [Security] ${e}`, t)
+        console.log(`🔒 [Security] ${event}`, details);
     },
+    
     getUserFingerprint: function() {
-        const e = [navigator.userAgent, navigator.language, screen.width + "x" + screen.height, (new Date).getTimezoneOffset()].join("|");
-        return CryptoJS.MD5(e).toString()
+        const fingerprintData = [
+            navigator.userAgent,
+            navigator.language,
+            screen.width + "x" + screen.height,
+            (new Date()).getTimezoneOffset()
+        ].join("|");
+        
+        return CryptoJS.MD5(fingerprintData).toString();
     },
+    
     saveToStorage: function() {
         try {
-            localStorage.setItem("security_logs", JSON.stringify(this.logs.slice(-50)))
-        } catch (e) {
-            console.error("Error saving security log:", e)
+            localStorage.setItem("security_logs", JSON.stringify(this.logs.slice(-50)));
+        } catch (error) {
+            console.error("Error saving security log:", error);
         }
     },
+    
     loadFromStorage: function() {
         try {
-            const e = localStorage.getItem("security_logs");
-            e && (this.logs = JSON.parse(e))
-        } catch (e) {
-            console.error("Error loading security log:", e)
+            const logsData = localStorage.getItem("security_logs");
+            if (logsData) {
+                this.logs = JSON.parse(logsData);
+            }
+        } catch (error) {
+            console.error("Error loading security log:", error);
         }
     }
 };
@@ -4526,143 +5118,189 @@ const loginProtection = {
     attempts: 0,
     blockUntil: 0,
     lastAttemptTime: 0,
+    
     init: function() {
         this.loadFromStorage();
         this.updateUI();
-        setInterval((() => this.checkBlockStatus()), 1000)
+        setInterval(() => this.checkBlockStatus(), 1000);
     },
+    
     increment: function() {
         this.attempts++;
         this.lastAttemptTime = Date.now();
-        this.attempts >= SECURITY_CONFIG.maxAttempts && (this.blockUntil = Date.now() + SECURITY_CONFIG.blockTime, securityLog.add("BLOCKED", {
-            reason: "max_attempts_reached",
-            attempts: this.attempts,
-            blockUntil: new Date(this.blockUntil).toISOString()
-        }));
+        
+        if (this.attempts >= SECURITY_CONFIG.maxAttempts) {
+            this.blockUntil = Date.now() + SECURITY_CONFIG.blockTime;
+            securityLog.add("BLOCKED", {
+                reason: "max_attempts_reached",
+                attempts: this.attempts,
+                blockUntil: new Date(this.blockUntil).toISOString()
+            });
+        }
+        
         this.saveToStorage();
-        this.updateUI()
+        this.updateUI();
     },
+    
     reset: function() {
         this.attempts = 0;
         this.blockUntil = 0;
         this.saveToStorage();
-        this.updateUI()
+        this.updateUI();
     },
+    
     isBlocked: function() {
-        return 0 !== this.blockUntil && (Date.now() < this.blockUntil || (this.blockUntil = 0, this.saveToStorage(), this.updateUI(), !1))
+        if (this.blockUntil !== 0 && Date.now() < this.blockUntil) {
+            return true;
+        } else if (this.blockUntil !== 0) {
+            this.blockUntil = 0;
+            this.saveToStorage();
+            this.updateUI();
+        }
+        return false;
     },
+    
     checkBlockStatus: function() {
+        const blockMessage = document.getElementById("blockedMessage");
+        const loginForm = document.getElementById("loginForm");
+        
         if (this.isBlocked()) {
-            const e = Math.ceil((this.blockUntil - Date.now()) / 1000 / 60);
-            document.getElementById("blockTime").textContent = e;
-            document.getElementById("blockedMessage").style.display = "block";
-            document.getElementById("loginForm").style.display = "none"
+            const minutesRemaining = Math.ceil((this.blockUntil - Date.now()) / 1000 / 60);
+            document.getElementById("blockTime").textContent = minutesRemaining;
+            if (blockMessage) blockMessage.style.display = "block";
+            if (loginForm) loginForm.style.display = "none";
         } else {
-            document.getElementById("blockedMessage").style.display = "none";
-            document.getElementById("loginForm").style.display = "block"
+            if (blockMessage) blockMessage.style.display = "none";
+            if (loginForm) loginForm.style.display = "block";
         }
     },
+    
     updateUI: function() {
-        document.getElementById("attemptCount").textContent = this.attempts;
-        document.getElementById("loginAttempts").style.display = this.attempts > 0 ? "block" : "none"
+        const attemptCount = document.getElementById("attemptCount");
+        const loginAttempts = document.getElementById("loginAttempts");
+        
+        if (attemptCount) attemptCount.textContent = this.attempts;
+        if (loginAttempts) {
+            loginAttempts.style.display = this.attempts > 0 ? "block" : "none";
+        }
     },
+    
     saveToStorage: function() {
         try {
-            const e = {
+            const data = {
                 attempts: this.attempts,
                 blockUntil: this.blockUntil,
                 lastAttemptTime: this.lastAttemptTime
             };
-            localStorage.setItem("login_protection", JSON.stringify(e))
-        } catch (e) {
-            console.error("Error saving protection data:", e)
+            localStorage.setItem("login_protection", JSON.stringify(data));
+        } catch (error) {
+            console.error("Error saving protection data:", error);
         }
     },
+    
     loadFromStorage: function() {
         try {
-            const e = localStorage.getItem("login_protection");
-            if (e) {
-                const t = JSON.parse(e);
-                this.attempts = t.attempts || 0;
-                this.blockUntil = t.blockUntil || 0;
-                this.lastAttemptTime = t.lastAttemptTime || 0
+            const data = localStorage.getItem("login_protection");
+            if (data) {
+                const parsed = JSON.parse(data);
+                this.attempts = parsed.attempts || 0;
+                this.blockUntil = parsed.blockUntil || 0;
+                this.lastAttemptTime = parsed.lastAttemptTime || 0;
             }
-        } catch (e) {
-            console.error("Error loading protection data:", e)
+        } catch (error) {
+            console.error("Error loading protection data:", error);
         }
     }
 };
 
 const inputValidation = {
-    validateUsername: function(e) {
-        if (!e || e.length < 3) return {
-            valid: !1,
-            message: "Username must be at least 3 characters"
-        };
+    validateUsername: function(username) {
+        if (!username || username.length < 3) {
+            return {
+                valid: false,
+                message: "Username must be at least 3 characters"
+            };
+        }
         
-        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(e);
+        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(username);
         if (!injectionValidation.valid) {
             return injectionValidation;
         }
         
-        const t = [/<script/i, /SELECT.*FROM/i, /UNION.*SELECT/i, /DROP.*TABLE/i, /--/, /\/\*.*\*\//];
-        for (const s of t)
-            if (s.test(e)) return securityLog.add("XSS_ATTEMPT", {
-                input: e,
-                pattern: s.toString()
-            }), {
-                valid: !1,
-                message: "Invalid username"
-            };
-        return {
-            valid: !0
-        }
-    },
-    validatePassword: function(e) {
-        if (!e || e.length < SECURITY_CONFIG.passwordMinLength) return {
-            valid: !1,
-            message: `Password must be at least ${SECURITY_CONFIG.passwordMinLength} characters`
-        };
+        const dangerousPatterns = [
+            /<script/i,
+            /SELECT.*FROM/i,
+            /UNION.*SELECT/i,
+            /DROP.*TABLE/i,
+            /--/,
+            /\/\*.*\*\//
+        ];
         
-        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(e);
+        for (const pattern of dangerousPatterns) {
+            if (pattern.test(username)) {
+                securityLog.add("XSS_ATTEMPT", {
+                    input: username,
+                    pattern: pattern.toString()
+                });
+                return {
+                    valid: false,
+                    message: "Invalid username"
+                };
+            }
+        }
+        
+        return { valid: true };
+    },
+    
+    validatePassword: function(password) {
+        if (!password || password.length < SECURITY_CONFIG.passwordMinLength) {
+            return {
+                valid: false,
+                message: `Password must be at least ${SECURITY_CONFIG.passwordMinLength} characters`
+            };
+        }
+        
+        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(password);
         if (!injectionValidation.valid) {
             return injectionValidation;
         }
         
         if (SECURITY_CONFIG.requireComplexPassword) {
-            const t = /[A-Z]/.test(e);
-            const s = /[a-z]/.test(e);
-            const n = /\d/.test(e);
-            const a = /[!@#$%^&*(),.?":{}|<>]/.test(e);
-            if (!(t && s && n && a)) return {
-                valid: !1,
-                message: "Password must contain uppercase, lowercase, numbers and special characters"
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasLowerCase = /[a-z]/.test(password);
+            const hasNumbers = /\d/.test(password);
+            const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+            
+            if (!(hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar)) {
+                return {
+                    valid: false,
+                    message: "Password must contain uppercase, lowercase, numbers and special characters"
+                };
             }
         }
-        return {
-            valid: !0
-        }
+        
+        return { valid: true };
     },
-    validateEmail: function(e) {
-        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(e);
+    
+    validateEmail: function(email) {
+        const injectionValidation = SQL_INJECTION_PROTECTION.validateForInjection(email);
         if (!injectionValidation.valid) {
             return injectionValidation;
         }
         
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? {
-            valid: !0
-        } : {
-            valid: !1,
-            message: "Invalid email address"
-        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email) ? 
+            { valid: true } : 
+            { valid: false, message: "Invalid email address" };
     }
 };
 
 const secureSession = {
     currentSession: null,
     timeoutId: null,
-    start: function(e) {
-        const sessionId = SECURE_COOKIE_SYSTEM.createSecureSession(e);
+    
+    start: function(user) {
+        const sessionId = SECURE_COOKIE_SYSTEM.createSecureSession(user);
         
         if (!sessionId) {
             console.error('❌ فشل إنشاء جلسة آمنة');
@@ -4670,7 +5308,7 @@ const secureSession = {
         }
         
         this.currentSession = {
-            user: e,
+            user: user,
             token: sessionId,
             startTime: Date.now(),
             lastActivity: Date.now(),
@@ -4682,10 +5320,10 @@ const secureSession = {
         
         this.startActivityMonitoring();
         
-        console.log('✅ تم إنشاء الجلسة للمستخدم:', e.username);
+        console.log('✅ تم إنشاء الجلسة للمستخدم:', user.username);
         
         securityLog.add("SESSION_STARTED", {
-            username: e.username,
+            username: user.username,
             keyHash: dynamicEncryptionSystem.getKeyInfo().currentKeyHash.substring(0, 8),
             sessionId: sessionId
         });
@@ -4740,14 +5378,23 @@ const secureSession = {
     },
     
     isValid: function() {
-        const e = this.get();
-        if (!e) return !1;
-        const t = Date.now();
-        const s = t - e.startTime;
-        const n = t - e.lastActivity;
-        return s > SECURITY_CONFIG.sessionTimeout ? (securityLog.add("SESSION_EXPIRED", {
-            username: e.user.username
-        }), !1) : (n > 300000 && this.updateActivity(), !0)
+        const session = this.get();
+        if (!session) return false;
+        
+        const now = Date.now();
+        const sessionDuration = now - session.startTime;
+        const inactivityDuration = now - session.lastActivity;
+        
+        if (sessionDuration > SECURITY_CONFIG.sessionTimeout) {
+            securityLog.add("SESSION_EXPIRED", { username: session.user.username });
+            return false;
+        }
+        
+        if (inactivityDuration > 300000) {
+            this.updateActivity();
+        }
+        
+        return true;
     },
     
     updateActivity: function() {
@@ -4768,87 +5415,123 @@ const secureSession = {
     },
     
     startActivityMonitoring: function() {
-        ["mousedown", "keydown", "scroll", "touchstart"].forEach((e => {
-            document.addEventListener(e, (() => this.updateActivity()))
-        }));
-        this.timeoutId = setInterval((() => {
-            this.isValid() || (this.end(), alert("Session expired for security reasons. Please login again."), location.reload())
-        }), 60000)
+        const events = ["mousedown", "keydown", "scroll", "touchstart"];
+        events.forEach(event => {
+            document.addEventListener(event, () => this.updateActivity());
+        });
+        
+        this.timeoutId = setInterval(() => {
+            if (!this.isValid()) {
+                this.end();
+                alert("Session expired for security reasons. Please login again.");
+                location.reload();
+            }
+        }, 60000);
     },
     
     end: function() {
-        this.currentSession && securityLog.add("SESSION_ENDED", {
-            username: this.currentSession.user.username
-        });
+        if (this.currentSession) {
+            securityLog.add("SESSION_ENDED", { username: this.currentSession.user.username });
+        }
+        
         this.currentSession = null;
-        
         SECURE_COOKIE_SYSTEM.destroySession();
-        
         localStorage.removeItem("secure_session_backup");
         
-        this.timeoutId && (clearInterval(this.timeoutId), this.timeoutId = null)
+        if (this.timeoutId) {
+            clearInterval(this.timeoutId);
+            this.timeoutId = null;
+        }
     }
 };
 
 const captchaSystem = {
     currentCaptcha: "",
     strength: "high",
+    
     generate: function() {
-        let e = 6;
-        "high" === this.strength && (e = 8);
-        "very-high" === this.strength && (e = 10);
-        const t = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@$%&*?";
-        let s = "";
-        for (let n = 0; n < e; n++) s += t.charAt(Math.floor(Math.random() * t.length));
-        this.currentCaptcha = s;
-        document.getElementById("captchaText").textContent = s;
-        return s
+        let length = 6;
+        if (this.strength === "high") length = 8;
+        if (this.strength === "very-high") length = 10;
+        
+        const characters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@$%&*?";
+        let captcha = "";
+        
+        for (let i = 0; i < length; i++) {
+            captcha += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        
+        this.currentCaptcha = captcha;
+        const captchaElement = document.getElementById("captchaText");
+        if (captchaElement) captchaElement.textContent = captcha;
+        
+        return captcha;
     },
-    validate: function(e) {
-        return e === this.currentCaptcha
+    
+    validate: function(input) {
+        return input === this.currentCaptcha;
     },
-    setStrength: function(e) {
-        this.strength = e;
-        this.generate()
+    
+    setStrength: function(strength) {
+        this.strength = strength;
+        this.generate();
     },
+    
     init: function() {
         this.generate();
-        document.getElementById("refreshCaptcha").addEventListener("click", (() => {
+        const refreshBtn = document.getElementById("refreshCaptcha");
+        refreshBtn && refreshBtn.addEventListener("click", () => {
             this.generate();
-            securityLog.add("CAPTCHA_REFRESH", {})
-        }))
+            securityLog.add("CAPTCHA_REFRESH", {});
+        });
     }
 };
 
 const captchaSystemRegistration = {
     currentCaptcha: "",
     strength: "high",
+    
     generate: function() {
-        let e = 6;
-        "high" === this.strength && (e = 8);
-        "very-high" === this.strength && (e = 10);
-        const t = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*?";
-        let s = "";
-        for (let n = 0; n < e; n++) s += t.charAt(Math.floor(Math.random() * t.length));
-        this.currentCaptcha = s;
-        document.getElementById("regCaptchaText").textContent = s;
-        return s
+        let length = 6;
+        if (this.strength === "high") length = 8;
+        if (this.strength === "very-high") length = 10;
+        
+        const characters = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*?";
+        let captcha = "";
+        
+        for (let i = 0; i < length; i++) {
+            captcha += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        
+        this.currentCaptcha = captcha;
+        const captchaElement = document.getElementById("regCaptchaText");
+        if (captchaElement) captchaElement.textContent = captcha;
+        
+        return captcha;
     },
-    validate: function(e) {
-        return e === this.currentCaptcha
+    
+    validate: function(input) {
+        return input === this.currentCaptcha;
     },
-    setStrength: function(e) {
-        this.strength = e;
-        this.generate()
+    
+    setStrength: function(strength) {
+        this.strength = strength;
+        this.generate();
     },
+    
     init: function() {
         this.generate();
-        document.getElementById("refreshRegCaptcha").addEventListener("click", (() => {
+        const refreshBtn = document.getElementById("refreshRegCaptcha");
+        refreshBtn && refreshBtn.addEventListener("click", () => {
             this.generate();
-            securityLog.add("REG_CAPTCHA_REFRESH", {})
-        }))
+            securityLog.add("REG_CAPTCHA_REFRESH", {});
+        });
     }
 };
+
+// ============================================
+// نظام إدارة المستخدمين
+// ============================================
 
 let users = [];
 
@@ -4897,8 +5580,8 @@ async function saveUsersToStorage() {
             await syncToFirebase('users', users);
             console.log('🔥 مزامنة المستخدمين مع Firebase:', users.length, 'مستخدم');
         }
-    } catch (e) {
-        console.error("Error saving users:", e);
+    } catch (error) {
+        console.error("Error saving users:", error);
     }
 }
 
@@ -4914,7 +5597,7 @@ function initializeDefaultUsers() {
         password: passwordHash,
         role: "admin",
         email: CONFIG.CONTACT.adminEmail,
-        createdAt: (new Date).toISOString(),
+        createdAt: (new Date()).toISOString(),
         id: "admin_initial_id",
         createdBy: "system",
         isDefault: true
@@ -4926,82 +5609,122 @@ function initializeDefaultUsers() {
     console.log('🔐 كلمة المرور: [SHA512 Hash]');
 }
 
+// ============================================
+// دوال المساعدة العامة
+// ============================================
+
 function updateDateTime() {
-    const e = new Date;
-    const t = e.toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric"
-    });
-    document.getElementById("date").textContent = t;
-    let s = e.getHours();
-    let n = e.getMinutes();
-    let a = e.getSeconds();
-    const o = s >= 12 ? "PM" : "AM";
-    s = s % 12 || 12;
-    n = n < 10 ? "0" + n : n;
-    a = a < 10 ? "0" + a : a;
-    const r = `${s}:${n}:${a}`;
-    document.getElementById("time").textContent = r;
-    document.getElementById("period").textContent = o
+    const now = new Date();
+    
+    // تحديث التاريخ
+    const dateElement = document.getElementById("date");
+    if (dateElement) {
+        const dateString = now.toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+        });
+        dateElement.textContent = dateString;
+    }
+    
+    // تحديث الوقت
+    const timeElement = document.getElementById("time");
+    const periodElement = document.getElementById("period");
+    
+    if (timeElement && periodElement) {
+        let hours = now.getHours();
+        let minutes = now.getMinutes();
+        let seconds = now.getSeconds();
+        const period = hours >= 12 ? "PM" : "AM";
+        
+        hours = hours % 12 || 12;
+        minutes = minutes < 10 ? "0" + minutes : minutes;
+        seconds = seconds < 10 ? "0" + seconds : seconds;
+        
+        const timeString = `${hours}:${minutes}:${seconds}`;
+        timeElement.textContent = timeString;
+        periodElement.textContent = period;
+    }
 }
 
 function openRegisterModal() {
-    document.getElementById("registerModal").style.display = "flex";
-    document.body.style.overflow = "hidden";
+    const modal = document.getElementById("registerModal");
+    if (modal) {
+        modal.style.display = "flex";
+        document.body.style.overflow = "hidden";
+    }
     captchaSystemRegistration.generate();
-    securityLog.add("REGISTER_MODAL_OPENED", {})
+    securityLog.add("REGISTER_MODAL_OPENED", {});
 }
 
 function closeRegisterModal() {
-    document.getElementById("registerModal").style.display = "none";
-    document.body.style.overflow = "auto";
-    document.getElementById("registerForm").reset();
-    document.getElementById("passwordStrength").textContent = "";
+    const modal = document.getElementById("registerModal");
+    if (modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
+    const form = document.getElementById("registerForm");
+    if (form) form.reset();
+    const passwordStrength = document.getElementById("passwordStrength");
+    if (passwordStrength) passwordStrength.textContent = "";
     captchaSystemRegistration.generate();
-    securityLog.add("REGISTER_MODAL_CLOSED", {})
+    securityLog.add("REGISTER_MODAL_CLOSED", {});
 }
 
 function openDeploymentGuide() {
-    document.getElementById("deploymentGuideModal").style.display = "flex";
-    document.body.style.overflow = "hidden";
-    document.getElementById("currentVersionDisplay").textContent = versionSystem.currentVersion;
-    document.getElementById("releaseDateDisplay").textContent = versionSystem.releaseDate;
-    securityLog.add("DEPLOYMENT_GUIDE_OPENED", {})
+    const modal = document.getElementById("deploymentGuideModal");
+    if (modal) {
+        modal.style.display = "flex";
+        document.body.style.overflow = "hidden";
+    }
+    const versionDisplay = document.getElementById("currentVersionDisplay");
+    const dateDisplay = document.getElementById("releaseDateDisplay");
+    
+    if (versionDisplay) versionDisplay.textContent = versionSystem.currentVersion;
+    if (dateDisplay) dateDisplay.textContent = versionSystem.releaseDate;
+    
+    securityLog.add("DEPLOYMENT_GUIDE_OPENED", {});
 }
 
 function closeDeploymentGuide() {
-    document.getElementById("deploymentGuideModal").style.display = "none";
-    document.body.style.overflow = "auto"
+    const modal = document.getElementById("deploymentGuideModal");
+    if (modal) {
+        modal.style.display = "none";
+        document.body.style.overflow = "auto";
+    }
 }
 
-function showDashboard(e) {
+function showDashboard(user) {
     console.log('🚀 عرض لوحة التحكم (النسخة السريعة)...');
     
     // إخفاء صفحة تسجيل الدخول فوراً
-    document.getElementById("loginPage").style.display = "none";
+    const loginPage = document.getElementById("loginPage");
+    const dashboardPage = document.getElementById("dashboardPage");
     
-    // إظهار صفحة الداشبورد فوراً
-    document.getElementById("dashboardPage").style.display = "block";
+    if (loginPage) loginPage.style.display = "none";
+    if (dashboardPage) dashboardPage.style.display = "block";
     
     // تحديث معلومات المستخدم (فوري)
-    document.getElementById("currentUser").textContent = e.username;
+    const currentUserElement = document.getElementById("currentUser");
+    const currentRoleElement = document.getElementById("currentRole");
     
-    const roleText = e.role === 'admin' ? 'مسؤول' : 
-                    e.role === 'moderator' ? 'مشرف' : 'مستخدم';
-    document.getElementById("currentRole").textContent = roleText;
+    if (currentUserElement) currentUserElement.textContent = user.username;
+    if (currentRoleElement) {
+        const roleText = user.role === 'admin' ? 'مسؤول' : 
+                        user.role === 'moderator' ? 'مشرف' : 'مستخدم';
+        currentRoleElement.textContent = roleText;
+    }
     
     // 🔥 تحميل البطاقات الأساسية فوراً
-    loadBasicDashboardCards(e);
+    loadBasicDashboardCards(user);
     
     // 🔥 تحميل البطاقات الإضافية في الخلفية
     setTimeout(() => {
-        loadAdvancedDashboardCards(e);
+        loadAdvancedDashboardCards(user);
     }, 100);
 }
 
-// البطاقات الأساسية (فورية)
 function loadBasicDashboardCards(user) {
     const basicPortals = [
         {
@@ -5030,7 +5753,6 @@ function loadBasicDashboardCards(user) {
     renderPortals(basicPortals, user);
 }
 
-// البطاقات المتقدمة (في الخلفية)
 function loadAdvancedDashboardCards(user) {
     const advancedPortals = [
         {
@@ -5078,13 +5800,12 @@ function loadAdvancedDashboardCards(user) {
     renderPortals(advancedPortals, user);
 }
 
-// دالة عامة لعرض البطاقات
 function renderPortals(portals, user) {
     const portalsGrid = document.getElementById("portalsGrid");
     if (!portalsGrid) return;
     
-    const filteredPortals = portals.filter(p => 
-        !p.allowedRoles || p.allowedRoles.includes(user.role)
+    const filteredPortals = portals.filter(portal => 
+        !portal.allowedRoles || portal.allowedRoles.includes(user.role)
     );
     
     filteredPortals.forEach(portal => {
@@ -5114,7 +5835,6 @@ function renderPortals(portals, user) {
     });
 }
 
-// معالج إجراءات البطاقات
 function handlePortalAction(action, userRole) {
     switch(action) {
         case 'openFreemacs':
@@ -5141,14 +5861,14 @@ function handlePortalAction(action, userRole) {
     }
 }
 
-function showSuccessMessage(e) {
-    const t = document.getElementById("copySuccess");
-    if (t) {
-        t.querySelector("span").textContent = e;
-        t.style.display = "flex";
-        setTimeout((() => {
-            t.style.display = "none"
-        }), 3000)
+function showSuccessMessage(message) {
+    const copySuccess = document.getElementById("copySuccess");
+    if (copySuccess) {
+        copySuccess.querySelector("span").textContent = message;
+        copySuccess.style.display = "flex";
+        setTimeout(() => {
+            copySuccess.style.display = "none";
+        }, 3000);
     } else {
         const messageDiv = document.createElement('div');
         messageDiv.style.cssText = `
@@ -5168,7 +5888,7 @@ function showSuccessMessage(e) {
         
         messageDiv.innerHTML = `
             <i class="fas fa-check-circle"></i>
-            <span>${e}</span>
+            <span>${message}</span>
         `;
         
         document.body.appendChild(messageDiv);
@@ -5183,44 +5903,328 @@ function showSuccessMessage(e) {
 
 function handleLoginFailure(username) {
     loginProtection.increment();
-    document.getElementById("securityAlert").textContent = "Invalid username or password!";
-    document.getElementById("securityAlert").style.display = "block";
+    const securityAlert = document.getElementById("securityAlert");
+    if (securityAlert) {
+        securityAlert.textContent = "Invalid username or password!";
+        securityAlert.style.display = "block";
+    }
     captchaSystem.generate();
-    document.getElementById("captcha").value = "";
+    const captchaInput = document.getElementById("captcha");
+    if (captchaInput) captchaInput.value = "";
     securityLog.add("LOGIN_FAILED", {
         username: username,
         attempt: loginProtection.attempts,
         reason: "invalid_credentials"
     });
     
-    if (loginProtection.attempts >= 3) {
-        document.getElementById("securityLog").style.display = "block";
+    const securityLogElement = document.getElementById("securityLog");
+    if (securityLogElement && loginProtection.attempts >= 3) {
+        securityLogElement.style.display = "block";
     }
 }
 
 // ============================================
-// نظام تسجيل الدخول المحسن - الإصلاح الكامل
+// إعدادات تسجيل الدخول والتسجيل
 // ============================================
 
-document.getElementById("loginForm").addEventListener("submit", (async function(e) {
+document.addEventListener("DOMContentLoaded", function() {
+    // تحديث التاريخ والوقت
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+    
+    // تهيئة الأنظمة
+    securityLog.loadFromStorage();
+    loginProtection.init();
+    captchaSystem.init();
+    captchaSystemRegistration.init();
+    freemacsSystem.init();
+    serverxtreamSystem.init();
+    addPortalSystem.init();
+    addServerSystem.init();
+    deleteConfirmSystem.init();
+    deleteServerConfirmSystem.init();
+    settingsSystem.init();
+    userManagementSystem.init();
+    tutorialVideosSystem.init();
+    adminAccountSystem.init();
+    versionSystem.init();
+    backupSystem.init();
+    dynamicEncryptionSystem.init();
+    
+    // تحميل بيانات المستخدمين
+    loadUsersFromStorage();
+    
+    // إعداد مستمعي الأحداث
+    setupEventListeners();
+    
+    // تهيئة واجهة المستخدم
+    initializeUI();
+});
+
+function setupEventListeners() {
+    // مستمعي أحداث تسجيل الدخول
+    const loginForm = document.getElementById("loginForm");
+    if (loginForm) {
+        loginForm.addEventListener("submit", handleLoginSubmit);
+    }
+    
+    // مستمعي أحداث التسجيل
+    const registerForm = document.getElementById("registerForm");
+    if (registerForm) {
+        registerForm.addEventListener("submit", handleRegisterSubmit);
+    }
+    
+    // مستمعي أحداث النماذج الأخرى
+    const openRegisterBtn = document.getElementById("openRegisterModal");
+    const closeRegisterBtn = document.getElementById("closeRegisterModal");
+    const cancelRegisterBtn = document.getElementById("cancelRegister");
+    const registerModal = document.getElementById("registerModal");
+    const forgotPasswordBtn = document.getElementById("forgotPassword");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const closeDeploymentBtn = document.getElementById("closeDeploymentGuide");
+    const deploymentModal = document.getElementById("deploymentGuideModal");
+    const regPasswordInput = document.getElementById("reg-password");
+    
+    openRegisterBtn && openRegisterBtn.addEventListener("click", openRegisterModal);
+    closeRegisterBtn && closeRegisterBtn.addEventListener("click", closeRegisterModal);
+    cancelRegisterBtn && cancelRegisterBtn.addEventListener("click", closeRegisterModal);
+    registerModal && registerModal.addEventListener("click", (e) => {
+        e.target === registerModal && closeRegisterModal();
+    });
+    
+    forgotPasswordBtn && forgotPasswordBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        alert("To reset your password, please contact technical support.");
+        securityLog.add("PASSWORD_RESET_REQUEST", {});
+    });
+    
+    logoutBtn && logoutBtn.addEventListener("click", () => {
+        secureSession.end();
+        currentUser = null;
+        const loginForm = document.getElementById("loginForm");
+        if (loginForm) loginForm.reset();
+        captchaSystem.generate();
+        const dashboardPage = document.getElementById("dashboardPage");
+        const loginPage = document.getElementById("loginPage");
+        if (dashboardPage) dashboardPage.style.display = "none";
+        if (loginPage) loginPage.style.display = "flex";
+        securityLog.add("LOGOUT", {});
+    });
+    
+    closeDeploymentBtn && closeDeploymentBtn.addEventListener("click", closeDeploymentGuide);
+    deploymentModal && deploymentModal.addEventListener("click", (e) => {
+        e.target === deploymentModal && closeDeploymentGuide();
+    });
+    
+    // مستمع حدث للتحقق من قوة كلمة المرور أثناء التسجيل
+    regPasswordInput && regPasswordInput.addEventListener("input", function() {
+        const password = this.value;
+        const strengthElement = document.getElementById("passwordStrength");
+        if (!strengthElement) return;
+        
+        let strength = 0;
+        let strengthLevel = "";
+        let color = "rgba(255,100,100,0.8)";
+        
+        if (password.length >= 8) strength++;
+        if (/[A-Z]/.test(password)) strength++;
+        if (/[a-z]/.test(password)) strength++;
+        if (/\d/.test(password)) strength++;
+        if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
+        
+        if (strength === 0) {
+            strengthLevel = "Very Weak";
+            color = "rgba(255,100,100,0.8)";
+        } else if (strength <= 2) {
+            strengthLevel = "Weak";
+            color = "rgba(255,150,100,0.8)";
+        } else if (strength <= 3) {
+            strengthLevel = "Medium";
+            color = "rgba(255,200,100,0.8)";
+        } else if (strength <= 4) {
+            strengthLevel = "Strong";
+            color = "rgba(100,200,100,0.8)";
+        } else {
+            strengthLevel = "Very Strong";
+            color = "rgba(50,255,50,0.8)";
+        }
+        
+        strengthElement.textContent = `Password Strength: ${strengthLevel}`;
+        strengthElement.style.color = color;
+    });
+    
+    // مستمع حدث زر الهروب لإغلاق النماذج
+    document.addEventListener("keydown", function(e) {
+        if (e.key === "Escape") {
+            if (registerModal && registerModal.style.display === "flex") {
+                closeRegisterModal();
+            }
+            if (deploymentModal && deploymentModal.style.display === "flex") {
+                closeDeploymentGuide();
+            }
+        }
+    });
+}
+
+function initializeUI() {
+    // إضافة تأثيرات التحميل
+    const container = document.querySelector(".container");
+    const datetimeContainer = document.querySelector(".datetime-container");
+    
+    if (container) container.style.opacity = "0";
+    if (datetimeContainer) datetimeContainer.style.opacity = "0";
+    
+    setTimeout(() => {
+        if (container) {
+            container.style.transition = "opacity 0.8s ease";
+            container.style.opacity = "1";
+        }
+        if (datetimeContainer) {
+            datetimeContainer.style.transition = "opacity 0.8s ease";
+            datetimeContainer.style.opacity = "1";
+        }
+    }, 200);
+    
+    // تحميل الصور بكسل
+    document.querySelectorAll("img").forEach(img => {
+        img.loading = "lazy";
+    });
+    
+    // تحميل الجلسة بعد تحميل جميع المكونات
+    setTimeout(() => {
+        initializeSessionOnLoad();
+    }, 1000);
+    
+    // حماية النقر الأيمن
+    window.addEventListener("contextmenu", function(e) {
+        if (e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA") {
+            e.preventDefault();
+        }
+    });
+    
+    // حماية النسخ
+    document.addEventListener("copy", function(e) {
+        if (!window.getSelection().toString().includes("AHMEDTECH")) {
+            e.preventDefault();
+        }
+    });
+    
+    // تحميل البيانات التلقائي بعد 3 ثوانٍ
+    setTimeout(async () => {
+        console.log('🚀 بدء تحميل البيانات التلقائي...');
+        await initializeFirebase();
+        await loadAllDataFromFirebase();
+        addRefreshDataButton();
+        console.log('✅ تم تحميل البيانات التلقائي');
+    }, 3000);
+    
+    // مزامنة تلقائية كل 10 دقائق (للمسؤولين فقط)
+    setInterval(async () => {
+        if (firebaseInitialized && currentUser && currentUser.role === 'admin') {
+            const lastSync = localStorage.getItem('last_data_sync');
+            if (lastSync) {
+                const syncTime = new Date(lastSync);
+                const now = new Date();
+                const diffMinutes = Math.floor((now - syncTime) / (1000 * 60));
+                
+                if (diffMinutes >= 10) {
+                    console.log('🔄 مزامنة تلقائية بعد', diffMinutes, 'دقيقة');
+                    await syncAllData();
+                }
+            }
+        }
+    }, 600000);
+    
+    // تهيئة نظام التزامن بين المتصفحات
+    setTimeout(() => {
+        CrossBrowserSync.init();
+    }, 5000);
+}
+
+// ============================================
+// نظام التزامن بين المتصفحات
+// ============================================
+
+const CrossBrowserSync = {
+    lastSyncTime: 0,
+    syncInterval: 30000, // كل 30 ثانية
+    
+    init: function() {
+        window.addEventListener('storage', this.handleStorageChange.bind(this));
+        this.startPeriodicSync();
+        console.log('🔗 نظام التزامن بين المتصفحات مفعل');
+    },
+    
+    handleStorageChange: function(event) {
+        if (event.key && event.key.includes('_timestamp') && event.newValue) {
+            console.log('🔄 تغيير في البيانات من نافذة أخرى:', event.key);
+            this.syncDataFromTimestamp(event.key.replace('_timestamp', ''), event.newValue);
+        }
+    },
+    
+    syncDataFromTimestamp: function(dataType, remoteTimestamp) {
+        const localTimestamp = localStorage.getItem(`${dataType}_timestamp`);
+        
+        if (!localTimestamp || new Date(remoteTimestamp) > new Date(localTimestamp)) {
+            console.log(`🔄 بيانات ${dataType} في النافذة الأخرى أحدث`);
+            setTimeout(() => {
+                if (firebaseInitialized) {
+                    loadAllDataFromFirebase(true).then(updated => {
+                        if (updated) {
+                            console.log(`✅ تم تحديث ${dataType} من نافذة أخرى`);
+                        }
+                    });
+                }
+            }, 2000);
+        }
+    },
+    
+    startPeriodicSync: function() {
+        setInterval(() => {
+            if (currentUser && firebaseInitialized) {
+                this.performSync();
+            }
+        }, this.syncInterval);
+    },
+    
+    performSync: function() {
+        const now = Date.now();
+        if (now - this.lastSyncTime < 10000) return;
+        
+        this.lastSyncTime = now;
+        loadAllDataFromFirebase(true).then(success => {
+            if (success) {
+                console.log('🔄 مزامنة دورية ناجحة');
+            }
+        });
+    },
+    
+    forceSync: function() {
+        return loadAllDataFromFirebase(false);
+    }
+};
+
+// ============================================
+// معالج تسجيل الدخول
+// ============================================
+
+async function handleLoginSubmit(e) {
     e.preventDefault();
     
-    // 🔥 منع تسجيل الدخول المزدوج تماماً
     const loginBtn = document.querySelector(".login-btn");
+    if (!loginBtn) return;
+    
     if (loginBtn.disabled) {
         console.log('⏳ جاري تسجيل الدخول بالفعل...');
         return;
     }
     
-    // تعطيل الزر فوراً
     loginBtn.disabled = true;
     const originalHTML = loginBtn.innerHTML;
     loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تسجيل الدخول...';
     
-    // إظهار المؤشر المحمل
     showLoading(true, 'جاري تسجيل الدخول...');
     
-    // التحقق من الحظر
     if (loginProtection.isBlocked()) {
         showLoading(false);
         loginBtn.disabled = false;
@@ -5229,7 +6233,6 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // التحقق من CSRF
     try {
         CSRF_SYSTEM.validateFormSubmission(e.target);
     } catch (error) {
@@ -5240,17 +6243,26 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // الحصول على البيانات
-    const username = document.getElementById("username").value.trim();
-    const password = document.getElementById("password").value;
-    const captchaInput = document.getElementById("captcha").value.trim();
+    const usernameInput = document.getElementById("username");
+    const passwordInput = document.getElementById("password");
+    const captchaInput = document.getElementById("captcha");
     
-    // التحقق من الحقن
+    if (!usernameInput || !passwordInput || !captchaInput) {
+        showLoading(false);
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
+        return;
+    }
+    
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+    const captcha = captchaInput.value.trim();
+    
     const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
-    const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captchaInput);
+    const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captcha);
     
     const usernameValidation = SQL_INJECTION_PROTECTION.validateForInjection(username);
-    const captchaValidation = SQL_INJECTION_PROTECTION.validateForInjection(captchaInput);
+    const captchaValidation = SQL_INJECTION_PROTECTION.validateForInjection(captcha);
     
     if (!usernameValidation.valid) {
         showLoading(false);
@@ -5268,15 +6280,17 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // التحقق من CAPTCHA
     if (!captchaSystem.validate(sanitizedCaptcha)) {
         showLoading(false);
         loginBtn.disabled = false;
         loginBtn.innerHTML = originalHTML;
-        document.getElementById("securityAlert").textContent = "Invalid CAPTCHA code! Remember: uppercase and lowercase matter.";
-        document.getElementById("securityAlert").style.display = "block";
+        const securityAlert = document.getElementById("securityAlert");
+        if (securityAlert) {
+            securityAlert.textContent = "Invalid CAPTCHA code! Remember: uppercase and lowercase matter.";
+            securityAlert.style.display = "block";
+        }
         captchaSystem.generate();
-        document.getElementById("captcha").value = "";
+        captchaInput.value = "";
         loginProtection.increment();
         securityLog.add("CAPTCHA_FAILED", {
             username: sanitizedUsername,
@@ -5286,7 +6300,6 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // التحقق من صحة اسم المستخدم
     const usernameValidation2 = inputValidation.validateUsername(sanitizedUsername);
     if (!usernameValidation2.valid) {
         showLoading(false);
@@ -5296,7 +6309,6 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // البحث عن المستخدم
     const user = users.find(u => u.username === sanitizedUsername);
     
     if (!user) {
@@ -5307,7 +6319,6 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // التحقق من كلمة المرور
     const isValidPassword = encryption.verifyPassword(password, user.password);
     
     if (!isValidPassword) {
@@ -5318,10 +6329,7 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // ✅ نجاح تسجيل الدخول
     loginProtection.reset();
-    
-    // إنشاء الجلسة
     const sessionCreated = SECURE_COOKIE_SYSTEM.createSecureSession(user);
     
     if (!sessionCreated) {
@@ -5333,117 +6341,56 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
-    // بدء الجلسة الآمنة
     secureSession.start(user);
     currentUser = user;
     
-   // داخل دالة تسجيل الدخول، استبدل هذا الجزء:
-setTimeout(async () => {
-    try {
-        // 🔥 الخطوة 1: عرض الداشبورد فوراً
-        showDashboard(user);
-        
-        // 🔥 الخطوة 2: تحميل بيانات المستخدم المحلية أولاً (فوري)
-        loadLocalUserData();
-        
-        // 🔥 الخطوة 3: مزامنة خفيفة مع Firebase (للمستخدم الحالي فقط)
-        if (firebaseInitialized) {
-            syncCurrentUserData(user);
+    setTimeout(async () => {
+        try {
+            showDashboard(user);
+            loadLocalUserData();
+            
+            if (firebaseInitialized) {
+                syncCurrentUserData(user);
+            }
+            
+            setTimeout(() => {
+                performBackgroundSync();
+            }, 3000);
+            
+            if (loginForm) loginForm.reset();
+            captchaSystem.generate();
+            
+        } catch (error) {
+            console.error('❌ خطأ في عرض الداشبورد:', error);
+            alert('حدث خطأ في تحميل لوحة التحكم.');
+        } finally {
+            showLoading(false);
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = originalHTML;
         }
         
-        // 🔥 الخطوة 4: تحديث كامل في الخلفية (بدون تأخير الدخول)
-        setTimeout(() => {
-            performBackgroundSync();
-        }, 3000); // بعد 3 ثواني
-        
-        // إعادة تعيين النموذج
-        document.getElementById("loginForm").reset();
-        captchaSystem.generate();
-        
-    } catch (error) {
-        console.error('❌ خطأ في عرض الداشبورد:', error);
-        alert('حدث خطأ في تحميل لوحة التحكم.');
-    } finally {
-        showLoading(false);
-        loginBtn.disabled = false;
-        loginBtn.innerHTML = originalHTML;
-    }
-    
-    securityLog.add("LOGIN_SUCCESS", {
-        username: sanitizedUsername,
-        role: user.role
-    });
-    
-}, 300);
-}));
+        securityLog.add("LOGIN_SUCCESS", {
+            username: sanitizedUsername,
+            role: user.role
+        });
+    }, 300);
+}
 
-updateDateTime();
-setInterval(updateDateTime, 1000);
-securityLog.loadFromStorage();
-loginProtection.init();
-captchaSystem.init();
-captchaSystemRegistration.init();
-freemacsSystem.init();
-serverxtreamSystem.init();
-addPortalSystem.init();
-addServerSystem.init();
-deleteConfirmSystem.init();
-deleteServerConfirmSystem.init();
-settingsSystem.init();
-userManagementSystem.init();
-tutorialVideosSystem.init();
-adminAccountSystem.init();
-versionSystem.init();
-backupSystem.init();
-dynamicEncryptionSystem.init();
+// ============================================
+// معالج التسجيل
+// ============================================
 
-loadUsersFromStorage();
-
-document.getElementById("openRegisterModal").addEventListener("click", openRegisterModal);
-document.getElementById("closeRegisterModal").addEventListener("click", closeRegisterModal);
-document.getElementById("cancelRegister").addEventListener("click", closeRegisterModal);
-document.getElementById("registerModal").addEventListener("click", (function(e) {
-    e.target === this && closeRegisterModal()
-}));
-document.getElementById("closeDeploymentGuide").addEventListener("click", closeDeploymentGuide);
-document.getElementById("deploymentGuideModal").addEventListener("click", (function(e) {
-    e.target === this && closeDeploymentGuide()
-}));
-document.addEventListener("keydown", (function(e) {
-    "Escape" === e.key && ("flex" === document.getElementById("registerModal").style.display && closeRegisterModal(), "flex" === document.getElementById("deploymentGuideModal").style.display && closeDeploymentGuide())
-}));
-document.getElementById("forgotPassword").addEventListener("click", (function(e) {
-    e.preventDefault();
-    alert("To reset your password, please contact technical support.");
-    securityLog.add("PASSWORD_RESET_REQUEST", {})
-}));
-document.getElementById("reg-password").addEventListener("input", (function() {
-    const e = this.value;
-    const t = document.getElementById("passwordStrength");
-    let s = 0;
-    let n = "";
-    let a = "rgba(255,100,100,0.8)";
-    e.length >= 8 && s++;
-    /[A-Z]/.test(e) && s++;
-    /[a-z]/.test(e) && s++;
-    /\d/.test(e) && s++;
-    /[!@#$%^&*(),.?":{}|<>]/.test(e) && s++;
-    0 === s ? (n = "Very Weak", a = "rgba(255,100,100,0.8)") : s <= 2 ? (n = "Weak", a = "rgba(255,150,100,0.8)") : s <= 3 ? (n = "Medium", a = "rgba(255,200,100,0.8)") : s <= 4 ? (n = "Strong", a = "rgba(100,200,100,0.8)") : (n = "Very Strong", a = "rgba(50,255,50,0.8)");
-    t.textContent = `Password Strength: ${n}`;
-    t.style.color = a
-}));
-
-document.getElementById("registerForm").addEventListener("submit", (function(e) {
+async function handleRegisterSubmit(e) {
     e.preventDefault();
     
-    // 🔥 منع التسجيل المزدوج
     const registerBtn = document.querySelector(".create-account-btn");
+    if (!registerBtn) return;
+    
     if (registerBtn.disabled) {
         console.log('⏳ جاري إنشاء الحساب بالفعل...');
         return;
     }
     
-    // تعطيل الزر فوراً
     registerBtn.disabled = true;
     const originalHTML = registerBtn.innerHTML;
     registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإنشاء...';
@@ -5460,22 +6407,35 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         return;
     }
     
-    const username = document.getElementById("reg-username").value.trim();
-    const email = document.getElementById("reg-email").value.trim();
-    const password = document.getElementById("reg-password").value;
-    const confirmPassword = document.getElementById("reg-confirm-password").value;
-    const captchaInput = document.getElementById("reg-captcha").value.trim();
-    const termsAccepted = document.getElementById("terms").checked;
+    const usernameInput = document.getElementById("reg-username");
+    const emailInput = document.getElementById("reg-email");
+    const passwordInput = document.getElementById("reg-password");
+    const confirmPasswordInput = document.getElementById("reg-confirm-password");
+    const captchaInput = document.getElementById("reg-captcha");
+    const termsInput = document.getElementById("terms");
     
-    // التحقق من الحقن
+    if (!usernameInput || !emailInput || !passwordInput || !confirmPasswordInput || !captchaInput || !termsInput) {
+        showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
+        return;
+    }
+    
+    const username = usernameInput.value.trim();
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    const confirmPassword = confirmPasswordInput.value;
+    const captcha = captchaInput.value.trim();
+    const termsAccepted = termsInput.checked;
+    
     const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
     const sanitizedEmail = SQL_INJECTION_PROTECTION.sanitizeInput(email);
-    const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captchaInput);
+    const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captcha);
     
     const validations = [
         SQL_INJECTION_PROTECTION.validateForInjection(username),
         SQL_INJECTION_PROTECTION.validateForInjection(email),
-        SQL_INJECTION_PROTECTION.validateForInjection(captchaInput)
+        SQL_INJECTION_PROTECTION.validateForInjection(captcha)
     ];
     
     for (const validation of validations) {
@@ -5488,14 +6448,13 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         }
     }
     
-    // التحقق من CAPTCHA
     if (!captchaSystemRegistration.validate(sanitizedCaptcha)) {
         showLoading(false);
         registerBtn.disabled = false;
         registerBtn.innerHTML = originalHTML;
         alert("Invalid CAPTCHA code! Please enter the code exactly as shown (case-sensitive).");
         captchaSystemRegistration.generate();
-        document.getElementById("reg-captcha").value = "";
+        captchaInput.value = "";
         securityLog.add("REG_CAPTCHA_FAILED", {
             username: sanitizedUsername,
             entered: sanitizedCaptcha,
@@ -5504,7 +6463,6 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         return;
     }
     
-    // التحقق من صحة المدخلات
     const inputValidations = [
         inputValidation.validateUsername(sanitizedUsername),
         inputValidation.validatePassword(password),
@@ -5537,7 +6495,6 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         return;
     }
     
-    // التحقق من عدم وجود المستخدم
     if (users.find(u => u.username === sanitizedUsername)) {
         showLoading(false);
         registerBtn.disabled = false;
@@ -5547,7 +6504,6 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         return;
     }
     
-    // إنشاء الحساب
     const passwordHash = encryption.hashPassword(password);
     
     const newUser = {
@@ -5555,7 +6511,7 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         password: passwordHash,
         role: "user",
         email: sanitizedEmail,
-        createdAt: (new Date).toISOString(),
+        createdAt: (new Date()).toISOString(),
         id: "user_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
     };
     
@@ -5565,16 +6521,21 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     setTimeout(() => {
         alert(`Account created successfully for ${sanitizedUsername}! Welcome to AHMEDTECH. You can now login with your credentials.`);
         e.target.reset();
-        document.getElementById("passwordStrength").textContent = "";
+        const passwordStrength = document.getElementById("passwordStrength");
+        if (passwordStrength) passwordStrength.textContent = "";
         captchaSystemRegistration.generate();
         closeRegisterModal();
         
-        // تعبئة اسم المستخدم في نموذج الدخول
-        document.getElementById("username").value = sanitizedUsername;
-        document.getElementById("password").value = "";
-        document.getElementById("captcha").value = "";
+        const loginUsername = document.getElementById("username");
+        const loginPassword = document.getElementById("password");
+        const loginCaptcha = document.getElementById("captcha");
+        
+        if (loginUsername) loginUsername.value = sanitizedUsername;
+        if (loginPassword) loginPassword.value = "";
+        if (loginCaptcha) loginCaptcha.value = "";
+        
         captchaSystem.generate();
-        document.getElementById("password").focus();
+        if (loginPassword) loginPassword.focus();
         
         showLoading(false);
         registerBtn.disabled = false;
@@ -5586,20 +6547,10 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
             hashType: "pbkdf2"
         });
     }, 1000);
-}));
-
-document.getElementById("logoutBtn").addEventListener("click", (function() {
-    secureSession.end();
-    currentUser = null;
-    document.getElementById("loginForm").reset();
-    captchaSystem.generate();
-    document.getElementById("dashboardPage").style.display = "none";
-    document.getElementById("loginPage").style.display = "flex";
-    securityLog.add("LOGOUT", {})
-}));
+}
 
 // ============================================
-// إصلاح تحميل الجلسة عند بدء التشغيل
+// تهيئة الجلسة عند تحميل الصفحة
 // ============================================
 
 function initializeSessionOnLoad() {
@@ -5618,34 +6569,10 @@ function initializeSessionOnLoad() {
     }, 500);
 }
 
-// إضافة مستمع لحدث تحميل الصفحة
-window.addEventListener("load", (function() {
-    document.querySelector(".container").style.opacity = "0";
-    document.querySelector(".datetime-container").style.opacity = "0";
-    
-    setTimeout(() => {
-        document.querySelector(".container").style.transition = "opacity 0.8s ease";
-        document.querySelector(".datetime-container").style.transition = "opacity 0.8s ease";
-        document.querySelector(".container").style.opacity = "1";
-        document.querySelector(".datetime-container").style.opacity = "1";
-    }, 200);
-    
-    document.querySelectorAll("img").forEach((e => {
-        e.loading = "lazy";
-    }));
-    
-    // ✅ **الإصلاح: تحميل الجلسة بعد تحميل جميع المكونات**
-    setTimeout(() => {
-        initializeSessionOnLoad();
-    }, 1000);
-}));
+// ============================================
+// الرسالة النهائية عند التحميل
+// ============================================
 
-window.addEventListener("contextmenu", (function(e) {
-    "INPUT" !== e.target.tagName && "TEXTAREA" !== e.target.tagName && e.preventDefault()
-}));
-document.addEventListener("copy", (function(e) {
-    window.getSelection().toString().includes("AHMEDTECH") || e.preventDefault()
-}));
 console.log(`✅ AHMEDTECH DZ-IPTV v${versionSystem.currentVersion} مع مزامنة Firebase`);
 console.log("📅 Release Date:", versionSystem.releaseDate);
 console.log("🔥 Firebase Sync: Active (Optimized)");
@@ -5659,120 +6586,4 @@ console.log("🔥 SQL/NoSQL Injection Protection: ACTIVE");
 console.log("🍪 HTTPS Cookies (HttpOnly, Secure, SameSite): ACTIVE");
 console.log("⚡ تسجيل الدخول: محسن للأداء - يعمل من الضغط الأولى ✓");
 console.log("⚠️ IMPORTANT: Replace all placeholder values in SECRETS object with your actual credentials");
-// ============================================
-// 🔥 تحميل البيانات التلقائي عند فتح الموقع
-// ============================================
-
-// تحميل البيانات بعد 3 ثوانٍ من فتح الموقع
-setTimeout(async () => {
-    console.log('🚀 بدء تحميل البيانات التلقائي...');
-    
-    // 1. تهيئة Firebase أولاً
-    await initializeFirebase();
-    
-    // 2. تحميل البيانات من Firebase
-    await loadAllDataFromFirebase();
-    
-    // 3. إضافة زر تحديث البيانات
-    addRefreshDataButton();
-    
-    console.log('✅ تم تحميل البيانات التلقائي');
-}, 3000);
-
-// مزامنة تلقائية كل 10 دقائق (للمسؤولين فقط)
-setInterval(async () => {
-    if (firebaseInitialized && currentUser && currentUser.role === 'admin') {
-        const lastSync = localStorage.getItem('last_data_sync');
-        if (lastSync) {
-            const syncTime = new Date(lastSync);
-            const now = new Date();
-            const diffMinutes = Math.floor((now - syncTime) / (1000 * 60));
-            
-            // مزامنة إذا مرت 10 دقائق أو أكثر
-            if (diffMinutes >= 10) {
-                console.log('🔄 مزامنة تلقائية بعد', diffMinutes, 'دقيقة');
-                await syncAllData();
-            }
-        }
-    }
-}, 600000); // كل 10 دقائق
-// ============================================
-// 🔥 نظام التزامن بين المتصفحات
-// ============================================
-
-const CrossBrowserSync = {
-    lastSyncTime: 0,
-    syncInterval: 30000, // كل 30 ثانية
-    
-    init: function() {
-        // الاستماع لتغييرات localStorage من نوافذ أخرى
-        window.addEventListener('storage', this.handleStorageChange.bind(this));
-        
-        // بدء المزامنة الدورية
-        this.startPeriodicSync();
-        
-        console.log('🔗 نظام التزامن بين المتصفحات مفعل');
-    },
-    
-    handleStorageChange: function(event) {
-        // إذا كانت التغييرات من نافذة أخرى
-        if (event.key && event.key.includes('_timestamp') && event.newValue) {
-            console.log('🔄 تغيير في البيانات من نافذة أخرى:', event.key);
-            
-            // تحديث البيانات المحلية إذا كانت أحدث
-            this.syncDataFromTimestamp(event.key.replace('_timestamp', ''), event.newValue);
-        }
-    },
-    
-    syncDataFromTimestamp: function(dataType, remoteTimestamp) {
-        const localTimestamp = localStorage.getItem(`${dataType}_timestamp`);
-        
-        if (!localTimestamp || new Date(remoteTimestamp) > new Date(localTimestamp)) {
-            console.log(`🔄 بيانات ${dataType} في النافذة الأخرى أحدث`);
-            
-            // تحميل أحدث البيانات من Firebase
-            setTimeout(() => {
-                if (firebaseInitialized) {
-                    loadAllDataFromFirebase(true).then(updated => {
-                        if (updated) {
-                            console.log(`✅ تم تحديث ${dataType} من نافذة أخرى`);
-                        }
-                    });
-                }
-            }, 2000);
-        }
-    },
-    
-    startPeriodicSync: function() {
-        setInterval(() => {
-            if (currentUser && firebaseInitialized) {
-                this.performSync();
-            }
-        }, this.syncInterval);
-    },
-    
-    performSync: function() {
-        const now = Date.now();
-        if (now - this.lastSyncTime < 10000) return; // لا تزامن أكثر من كل 10 ثواني
-        
-        this.lastSyncTime = now;
-        
-        loadAllDataFromFirebase(true).then(success => {
-            if (success) {
-                console.log('🔄 مزامنة دورية ناجحة');
-            }
-        });
-    },
-    
-    forceSync: function() {
-        return loadAllDataFromFirebase(false); // مع عرض المؤشر
-    }
-};
-
-// تفعيل النظام عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
-        CrossBrowserSync.init();
-    }, 5000);
-});
 console.log("✅ ✅ ✅ النظام جاهز للنشر مع المزامنة والحماية والأداء العالي! ✅ ✅ ✅");

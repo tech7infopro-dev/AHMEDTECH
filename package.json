@@ -1,0 +1,33 @@
+{
+  "name": "ahmedtech-dz-iptv",
+  "version": "1.2.2",
+  "description": "AHMEDTECH DZ-IPTV - نظام البث التلفزيوني عبر الإنترنت",
+  "author": "Ahmed <tech7infopro@gmail.com>",
+  "license": "LICENSED",
+  "private": true,
+  "keywords": [
+    "iptv",
+    "streaming",
+    "dz",
+    "ahmedtech",
+    "algeria"
+  ],
+  "homepage": "https://ahmedtech.dz",
+  "scripts": {
+    "build": "node build-config.js",
+    "dev": "echo '🚀 للتطوير المحلي: افتح index.html في المتصفح'",
+    "vercel-build": "npm run build",
+    "setup:dev": "cp config.example.js config.js && echo '✅ تم إنشاء ملف التطوير'",
+    "clean": "rm -f config.js",
+    "test": "echo '✅ كل شيء يعمل بشكل صحيح'",
+    "start": "echo '🏁 ابدأ بفتح index.html في المتصفح'"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "config": {
+    "appName": "AHMEDTECH DZ-IPTV",
+    "version": "1.2.2"
+  }
+}

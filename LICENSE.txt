@@ -1,0 +1,29 @@
+Copyright © 2026 AHMEDTECH Private IPTV
+جميع الحقوق محفوظة / All rights reserved.
+
+هذا البرنامج والكود المصدري المرفق ملكية خاصة وسرية تماما
+ممنوع منعا باتا القيام بأي من الآتي بدون إذن كتابي مسبق وصريح من صاحب الحقوق:
+
+- نسخ الكود أو أي جزء منه
+- تعديله أو اشتقاق أعمال منه
+- توزيعه أو نشره أو رفعه على أي منصة أخرى
+- استخدامه تجاريا أو في منتجات أخرى
+- عمل Fork أو Merge أو إنشاء مشاريع مشتقة
+
+يسمح فقط بما يلي:
+- عرض الكود المصدري لأغراض الاطلاع والمراجعة داخل مستودع GitHub هذا
+- تشغيل البرنامج وتجربته لأغراض شخصية غير تجارية
+
+أي انتهاك لهذه الشروط يعتبر مخالفة لحقوق النشر وقد يعرض المتجاوز للمسائلة القانونية.
+
+───
+
+This software and its source code are proprietary and confidential.
+Unauthorized copying, modification, distribution, merging, publishing,
+forking, or commercial use is strictly prohibited without explicit
+prior written permission from the copyright holder.
+
+Permission is granted solely to view the source code and run the software
+for personal, non-commercial evaluation purposes within this GitHub repository only.
+
+Any violation constitutes copyright infringement and may result in legal action.

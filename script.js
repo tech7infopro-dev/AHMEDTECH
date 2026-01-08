@@ -163,64 +163,163 @@ let currentUser = null;
 let autoSyncInterval = null;
 let isLoggingIn = false; // إضافة: منع تسجيل الدخول المزدوج
 // ============================================
-// 🔥 نظام تحميل البيانات من Firebase (الحل الجديد)
+// نظام منع النقر المتعدد
 // ============================================
 
-async function loadAllDataFromFirebase() {
+const ClickProtection = {
+    activeForms: new Set(),
+    
+    protectForm: function(formId) {
+        const form = document.getElementById(formId);
+        if (!form) return;
+        
+        form.addEventListener('submit', (e) => {
+            if (this.activeForms.has(formId)) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log(`⏳ النموذج ${formId} قيد المعالجة بالفعل`);
+                return false;
+            }
+            
+            this.activeForms.add(formId);
+            
+            // إعادة التفعيل بعد 3 ثواني
+            setTimeout(() => {
+                this.activeForms.delete(formId);
+            }, 3000);
+            
+            return true;
+        });
+    }
+};
+
+// تفعيل الحماية عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    ClickProtection.protectForm('loginForm');
+    ClickProtection.protectForm('registerForm');
+});
+// ============================================
+// 🔥 نظام تحميل البيانات من Firebase (نسخة متوازنة)
+// ============================================
+
+async function loadAllDataFromFirebase(silent = true) {
     console.log('🔄 محاولة تحميل البيانات من Firebase...');
     
     if (!firebaseInitialized || !db) {
         console.log('⚠️ Firebase غير متصل، استخدام البيانات المحلية');
-        return;
+        return false;
     }
     
     try {
-        showLoading(true, 'جاري تحميل البيانات من السحابة...');
-        
-        // تحميل جميع البيانات
-        const usersData = await loadFromFirebase('users');
-        const packagesData = await loadFromFirebase('freemacs_packages');
-        const serversData = await loadFromFirebase('xtream_servers');
-        const videosData = await loadFromFirebase('tutorial_videos');
-        
-        // تحديث بيانات المستخدمين
-        if (usersData && usersData.length > 0) {
-            users = SQL_INJECTION_PROTECTION.sanitizeFirebaseData(usersData);
-            console.log('✅ تم تحميل', users.length, 'مستخدم من Firebase');
+        // 🔥 إذا كان silent = true فلا نعرض مؤشر تحميل (مثلاً أثناء الدخول)
+        if (!silent) {
+            showLoading(true, 'جاري تحديث البيانات من السحابة...');
         }
         
-        // تحديث الباقات
-        if (packagesData) {
-            freemacsSystem.packages = SQL_INJECTION_PROTECTION.sanitizeFirebaseData(packagesData);
-            console.log('✅ تم تحميل', freemacsSystem.packages.length, 'باقة من Firebase');
+        // تحميل البيانات بشكل متوازي مع حفظ الطابع الزمني
+        const [usersData, packagesData, serversData, videosData] = await Promise.all([
+            loadFromFirebaseWithTimestamp('users'),
+            loadFromFirebaseWithTimestamp('freemacs_packages'),
+            loadFromFirebaseWithTimestamp('xtream_servers'),
+            loadFromFirebaseWithTimestamp('tutorial_videos')
+        ]);
+        
+        // 🔥 تحديث البيانات فقط إذا كانت أحدث من المحلية
+        await updateIfNewer('users', usersData);
+        await updateIfNewer('freemacs_packages', packagesData);
+        await updateIfNewer('xtream_servers', serversData);
+        await updateIfNewer('tutorial_videos', videosData);
+        
+        const syncTime = new Date().toISOString();
+        localStorage.setItem("last_data_sync", syncTime);
+        localStorage.setItem("last_sync_timestamp", Date.now());
+        
+        console.log('✅ تم تحديث البيانات من Firebase');
+        
+        if (!silent) {
+            showSyncNotification('تم تحديث البيانات من السحابة', 'success');
         }
         
-        // تحديث الخوادم
-        if (serversData) {
-            serverxtreamSystem.servers = SQL_INJECTION_PROTECTION.sanitizeFirebaseData(serversData);
-            console.log('✅ تم تحميل', serverxtreamSystem.servers.length, 'خادم من Firebase');
-        }
-        
-        // تحديث الفيديوهات
-        if (videosData) {
-            tutorialVideosSystem.videos = SQL_INJECTION_PROTECTION.sanitizeFirebaseData(videosData);
-            console.log('✅ تم تحميل', tutorialVideosSystem.videos.length, 'فيديو من Firebase');
-        }
-        
-        // حفظ نسخة محلية
-        localStorage.setItem("ahmedtech_users", JSON.stringify(users));
-        localStorage.setItem("freemacs_packages", JSON.stringify(freemacsSystem.packages));
-        localStorage.setItem("serverxtream_servers", JSON.stringify(serverxtreamSystem.servers));
-        localStorage.setItem("tutorial_videos", JSON.stringify(tutorialVideosSystem.videos));
-        localStorage.setItem("last_data_sync", new Date().toISOString());
-        
-        console.log('✅ تم تحميل جميع البيانات من Firebase');
-        showSyncNotification('تم تحديث البيانات من السحابة', 'success');
+        return true;
         
     } catch (error) {
         console.error('❌ خطأ في تحميل البيانات من Firebase:', error);
+        if (!silent) {
+            showSyncNotification('خطأ في تحديث البيانات', 'error');
+        }
+        return false;
     } finally {
-        showLoading(false);
+        if (!silent) {
+            showLoading(false);
+        }
+    }
+}
+
+// 🔥 دالة مساعدة للتحميل مع الطابع الزمني
+async function loadFromFirebaseWithTimestamp(collectionName) {
+    if (!firebaseInitialized || !db) return null;
+    
+    try {
+        const snapshot = await db.collection(collectionName)
+            .orderBy('lastUpdated', 'desc')
+            .limit(1)
+            .get();
+        
+        if (snapshot.empty) return null;
+        
+        const latestDoc = snapshot.docs[0];
+        const data = await db.collection(collectionName).get();
+        
+        const items = data.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        return {
+            items: items,
+            timestamp: latestDoc.data().lastUpdated || new Date().toISOString()
+        };
+    } catch (error) {
+        console.error(`❌ خطأ في تحميل ${collectionName}:`, error);
+        return null;
+    }
+}
+
+// 🔥 دالة تحديث البيانات فقط إذا كانت أحدث
+async function updateIfNewer(collectionName, firebaseData) {
+    if (!firebaseData || !firebaseData.items) return;
+    
+    const localTimestamp = localStorage.getItem(`${collectionName}_timestamp`);
+    const firebaseTimestamp = firebaseData.timestamp;
+    
+    // إذا كانت البيانات من Firebase أحدث
+    if (!localTimestamp || new Date(firebaseTimestamp) > new Date(localTimestamp)) {
+        console.log(`🔄 تحديث ${collectionName} من Firebase (أحدث)`);
+        
+        const sanitizedData = SQL_INJECTION_PROTECTION.sanitizeFirebaseData(firebaseData.items);
+        
+        switch(collectionName) {
+            case 'users':
+                users = sanitizedData;
+                localStorage.setItem("ahmedtech_users", JSON.stringify(users));
+                break;
+            case 'freemacs_packages':
+                freemacsSystem.packages = sanitizedData;
+                localStorage.setItem("freemacs_packages", JSON.stringify(freemacsSystem.packages));
+                break;
+            case 'xtream_servers':
+                serverxtreamSystem.servers = sanitizedData;
+                localStorage.setItem("serverxtream_servers", JSON.stringify(serverxtreamSystem.servers));
+                break;
+            case 'tutorial_videos':
+                tutorialVideosSystem.videos = sanitizedData;
+                localStorage.setItem("tutorial_videos", JSON.stringify(tutorialVideosSystem.videos));
+                break;
+        }
+        
+        localStorage.setItem(`${collectionName}_timestamp`, firebaseTimestamp);
+    } else {
+        console.log(`⏩ ${collectionName} محلية (أحدث أو متساوية)`);
     }
 }
 
@@ -1449,6 +1548,100 @@ async function syncAllData() {
     } catch (error) {
         console.error('❌ خطأ في مزامنة البيانات:', error);
     }
+}
+
+// ============================================
+// 🔥 نظام المزامنة الذكية (السرعة + التزامن)
+// ============================================
+
+// تحميل البيانات المحلية للمستخدم
+function loadLocalUserData() {
+    try {
+        // تحميل البيانات الأساسية من localStorage
+        const localUsers = localStorage.getItem("ahmedtech_users");
+        if (localUsers) {
+            const parsedUsers = JSON.parse(localUsers);
+            // تحديث بيانات المستخدم الحالي
+            const currentUserIndex = parsedUsers.findIndex(u => u.username === currentUser.username);
+            if (currentUserIndex !== -1) {
+                users[currentUserIndex] = { ...parsedUsers[currentUserIndex] };
+            }
+        }
+        console.log('💾 تم تحميل البيانات المحلية');
+    } catch (error) {
+        console.error('❌ خطأ في تحميل البيانات المحلية:', error);
+    }
+}
+
+// مزامنة بيانات المستخدم الحالي فقط
+async function syncCurrentUserData(user) {
+    try {
+        if (!firebaseInitialized || !db) return;
+        
+        // البحث عن المستخدم في Firebase
+        const userSnapshot = await db.collection('users')
+            .where('username', '==', user.username)
+            .limit(1)
+            .get();
+        
+        if (!userSnapshot.empty) {
+            const firebaseUser = userSnapshot.docs[0].data();
+            const firebaseTimestamp = firebaseUser.lastUpdated || firebaseUser.updatedAt;
+            const localTimestamp = user.updatedAt || user.createdAt;
+            
+            // إذا كانت بيانات Firebase أحدث
+            if (firebaseTimestamp && (!localTimestamp || new Date(firebaseTimestamp) > new Date(localTimestamp))) {
+                console.log('🔄 تحديث بيانات المستخدم من Firebase');
+                
+                // تحديث البيانات المحلية
+                const userIndex = users.findIndex(u => u.username === user.username);
+                if (userIndex !== -1) {
+                    users[userIndex] = {
+                        ...users[userIndex],
+                        ...firebaseUser,
+                        password: users[userIndex].password // الاحتفاظ بكلمة المرور المحلية
+                    };
+                    saveUsersToStorage();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('❌ خطأ في مزامنة بيانات المستخدم:', error);
+    }
+}
+
+// مزامنة خلفية كاملة
+async function performBackgroundSync() {
+    console.log('🔄 بدء المزامنة الخلفية...');
+    
+    try {
+        // 1. تحميل أحدث البيانات من Firebase
+        await loadAllDataFromFirebase(true); // silent = true
+        
+        // 2. تحديث واجهة المستخدم إذا لزم الأمر
+        if (currentUser) {
+            updateDashboardIfNeeded();
+        }
+        
+        // 3. مزامنة البيانات المحلية مع Firebase (إذا كان المستخدم مسؤولاً)
+        if (currentUser && currentUser.role === 'admin') {
+            setTimeout(() => {
+                syncAllData().then(() => {
+                    console.log('✅ تمت المزامنة الخلفية الكاملة');
+                });
+            }, 5000);
+        }
+        
+    } catch (error) {
+        console.error('❌ خطأ في المزامنة الخلفية:', error);
+    }
+}
+
+// تحديث الداشبورد إذا تغيرت البيانات
+function updateDashboardIfNeeded() {
+    // يمكن إضافة منطق لتحديث واجهة المستخدم
+    // إذا تغيرت البيانات بشكل كبير
+    console.log('✅ الداشبورد محدث مع أحدث البيانات');
 }
 
 async function restoreFromFirebase() {
@@ -4784,103 +4977,122 @@ function closeDeploymentGuide() {
 }
 
 function showDashboard(e) {
-    console.log('🚀 عرض لوحة التحكم للمستخدم:', e.username);
+    console.log('🚀 عرض لوحة التحكم (النسخة السريعة)...');
     
-    // إظهار مؤشر تحميل
-    showLoading(true, 'جاري تحميل لوحة التحكم...');
-    
-    // إخفاء صفحة تسجيل الدخول
+    // إخفاء صفحة تسجيل الدخول فوراً
     document.getElementById("loginPage").style.display = "none";
     
-    // إظهار صفحة الداشبورد
+    // إظهار صفحة الداشبورد فوراً
     document.getElementById("dashboardPage").style.display = "block";
     
-    // تحديث معلومات المستخدم
+    // تحديث معلومات المستخدم (فوري)
     document.getElementById("currentUser").textContent = e.username;
     
     const roleText = e.role === 'admin' ? 'مسؤول' : 
                     e.role === 'moderator' ? 'مشرف' : 'مستخدم';
     document.getElementById("currentRole").textContent = roleText;
     
-    // إعادة بناء البطاقات
-    const portalsGrid = document.getElementById("portalsGrid");
-    portalsGrid.innerHTML = "";
+    // 🔥 تحميل البطاقات الأساسية فوراً
+    loadBasicDashboardCards(e);
     
-    // قائمة البطاقات
-    const portals = [
+    // 🔥 تحميل البطاقات الإضافية في الخلفية
+    setTimeout(() => {
+        loadAdvancedDashboardCards(e);
+    }, 100);
+}
+
+// البطاقات الأساسية (فورية)
+function loadBasicDashboardCards(user) {
+    const basicPortals = [
         {
             id: "free-macs",
             title: "Free MACs",
-            description: "Get free MAC addresses for IPTV testing",
+            description: "Get free MAC addresses",
             icon: "fas fa-key",
-            allowedRoles: ["admin", "moderator", "user"],
             action: "openFreemacs"
-        }, 
+        },
         {
             id: "server-xtream",
             title: "Server Xtream",
-            description: "Access Xtream Codes server panel",
+            description: "Access Xtream Codes",
             icon: "fas fa-server",
-            allowedRoles: ["admin", "moderator", "user"],
             action: "openServerxtream"
-        }, 
+        },
         {
             id: "tutorial-video",
             title: "Tutorial Video",
-            description: "Watch IPTV setup tutorials",
+            description: "Watch IPTV tutorials",
             icon: "fas fa-video",
-            allowedRoles: ["admin", "moderator", "user"],
             action: "openTutorialVideos"
-        }, 
+        }
+    ];
+    
+    renderPortals(basicPortals, user);
+}
+
+// البطاقات المتقدمة (في الخلفية)
+function loadAdvancedDashboardCards(user) {
+    const advancedPortals = [
         {
             id: "telegram-channel",
             title: "Telegram Channel",
             description: "Join our official Telegram",
             icon: "fab fa-telegram",
-            allowedRoles: ["admin", "moderator", "user"],
             content: "https://t.me/+IvjWx9QcwyQxYmI8",
             isLink: true
-        }, 
+        },
         {
             id: "deployment-guide",
             title: "Deployment Guide",
-            description: "Complete setup and deployment instructions",
+            description: "Setup instructions",
             icon: "fas fa-book",
-            allowedRoles: ["admin", "moderator"],
-            action: "openDeploymentGuide"
-        }, 
+            action: "openDeploymentGuide",
+            allowedRoles: ["admin", "moderator"]
+        },
         {
             id: "user-management",
             title: "User Management",
             description: "Manage user accounts",
             icon: "fas fa-users",
-            allowedRoles: ["admin", "moderator"],
-            action: "openUserManagement"
-        }, 
+            action: "openUserManagement",
+            allowedRoles: ["admin", "moderator"]
+        },
         {
             id: "settings",
             title: "Settings",
-            description: "Configure system settings",
+            description: "Configure system",
             icon: "fas fa-cog",
-            allowedRoles: ["admin"],
-            action: "openSettings"
+            action: "openSettings",
+            allowedRoles: ["admin"]
         },
         {
             id: "sync-portal",
-            title: "مزامنة السحابة",
-            description: "مزامنة واستعادة البيانات مع Firebase",
+            title: "Cloud Sync",
+            description: "Sync with Firebase",
             icon: "fas fa-cloud",
-            allowedRoles: ["admin"],
-            action: "openSyncControlPanel"
+            action: "openSyncControlPanel",
+            allowedRoles: ["admin"]
         }
     ];
     
-    // فلترة البطاقات حسب الصلاحيات
-    const filteredPortals = portals.filter(p => p.allowedRoles.includes(e.role));
+    renderPortals(advancedPortals, user);
+}
+
+// دالة عامة لعرض البطاقات
+function renderPortals(portals, user) {
+    const portalsGrid = document.getElementById("portalsGrid");
+    if (!portalsGrid) return;
     
-    // إنشاء البطاقات
+    const filteredPortals = portals.filter(p => 
+        !p.allowedRoles || p.allowedRoles.includes(user.role)
+    );
+    
     filteredPortals.forEach(portal => {
+        // التحقق إذا كانت البطاقة موجودة بالفعل
+        if (document.getElementById(`portal-${portal.id}`)) return;
+        
         const card = document.createElement("div");
+        card.id = `portal-${portal.id}`;
         card.className = "portal-card";
         card.innerHTML = `
             <div class="portal-icon">
@@ -4892,29 +5104,7 @@ function showDashboard(e) {
         
         card.addEventListener("click", () => {
             if (portal.action) {
-                switch(portal.action) {
-                    case 'openFreemacs':
-                        freemacsSystem.openModal(e.role);
-                        break;
-                    case 'openServerxtream':
-                        serverxtreamSystem.openModal(e.role);
-                        break;
-                    case 'openSettings':
-                        settingsSystem.openModal(e.role);
-                        break;
-                    case 'openUserManagement':
-                        userManagementSystem.openModal(e.role);
-                        break;
-                    case 'openTutorialVideos':
-                        tutorialVideosSystem.openModal(e.role);
-                        break;
-                    case 'openDeploymentGuide':
-                        openDeploymentGuide();
-                        break;
-                    case 'openSyncControlPanel':
-                        versionSystem.showSyncControlPanel();
-                        break;
-                }
+                handlePortalAction(portal.action, user.role);
             } else if (portal.isLink) {
                 window.open(portal.content, "_blank");
             }
@@ -4922,12 +5112,33 @@ function showDashboard(e) {
         
         portalsGrid.appendChild(card);
     });
-    
-    // إخفاء مؤشر التحميل
-    setTimeout(() => {
-        showLoading(false);
-        console.log('✅ تم تحميل لوحة التحكم بنجاح');
-    }, 500);
+}
+
+// معالج إجراءات البطاقات
+function handlePortalAction(action, userRole) {
+    switch(action) {
+        case 'openFreemacs':
+            freemacsSystem.openModal(userRole);
+            break;
+        case 'openServerxtream':
+            serverxtreamSystem.openModal(userRole);
+            break;
+        case 'openTutorialVideos':
+            tutorialVideosSystem.openModal(userRole);
+            break;
+        case 'openDeploymentGuide':
+            openDeploymentGuide();
+            break;
+        case 'openUserManagement':
+            userManagementSystem.openModal(userRole);
+            break;
+        case 'openSettings':
+            settingsSystem.openModal(userRole);
+            break;
+        case 'openSyncControlPanel':
+            versionSystem.showSyncControlPanel();
+            break;
+    }
 }
 
 function showSuccessMessage(e) {
@@ -4988,43 +5199,53 @@ function handleLoginFailure(username) {
 }
 
 // ============================================
-// نظام تسجيل الدخول المحسن - الإصلاح
+// نظام تسجيل الدخول المحسن - الإصلاح الكامل
 // ============================================
 
 document.getElementById("loginForm").addEventListener("submit", (async function(e) {
     e.preventDefault();
     
-    // منع تسجيل الدخول المزدوج
-    if (isLoggingIn) {
+    // 🔥 منع تسجيل الدخول المزدوج تماماً
+    const loginBtn = document.querySelector(".login-btn");
+    if (loginBtn.disabled) {
         console.log('⏳ جاري تسجيل الدخول بالفعل...');
         return;
     }
     
-    isLoggingIn = true;
+    // تعطيل الزر فوراً
+    loginBtn.disabled = true;
+    const originalHTML = loginBtn.innerHTML;
+    loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تسجيل الدخول...';
     
     // إظهار المؤشر المحمل
     showLoading(true, 'جاري تسجيل الدخول...');
     
+    // التحقق من الحظر
     if (loginProtection.isBlocked()) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         alert("Login temporarily blocked due to too many failed attempts.");
         return;
     }
     
+    // التحقق من CSRF
     try {
         CSRF_SYSTEM.validateFormSubmission(e.target);
     } catch (error) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         alert(error.message);
         return;
     }
     
+    // الحصول على البيانات
     const username = document.getElementById("username").value.trim();
     const password = document.getElementById("password").value;
     const captchaInput = document.getElementById("captcha").value.trim();
     
+    // التحقق من الحقن
     const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
     const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captchaInput);
     
@@ -5033,21 +5254,25 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
     
     if (!usernameValidation.valid) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         alert(usernameValidation.message);
         return;
     }
     
     if (!captchaValidation.valid) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         alert(captchaValidation.message);
         return;
     }
     
+    // التحقق من CAPTCHA
     if (!captchaSystem.validate(sanitizedCaptcha)) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         document.getElementById("securityAlert").textContent = "Invalid CAPTCHA code! Remember: uppercase and lowercase matter.";
         document.getElementById("securityAlert").style.display = "block";
         captchaSystem.generate();
@@ -5061,115 +5286,95 @@ document.getElementById("loginForm").addEventListener("submit", (async function(
         return;
     }
     
+    // التحقق من صحة اسم المستخدم
     const usernameValidation2 = inputValidation.validateUsername(sanitizedUsername);
     if (!usernameValidation2.valid) {
         showLoading(false);
-        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
         alert(usernameValidation2.message);
         return;
     }
     
+    // البحث عن المستخدم
     const user = users.find(u => u.username === sanitizedUsername);
     
-    if (user) {
-        const isValidPassword = encryption.verifyPassword(password, user.password);
-        
-        if (isValidPassword) {
-            loginProtection.reset();
-            
-            // ✅ **الإصلاح: إنشاء الجلسة أولاً ثم الانتقال للوحة التحكم**
-            const sessionCreated = SECURE_COOKIE_SYSTEM.createSecureSession(user);
-            
-            if (!sessionCreated) {
-                console.error('❌ فشل إنشاء الجلسة');
-                showLoading(false);
-                isLoggingIn = false;
-                alert('خطأ في إنشاء الجلسة. يرجى المحاولة مرة أخرى.');
-                return;
-            }
-            
-            secureSession.start(user);
-            
-            const loginBtn = document.querySelector(".login-btn");
-            const originalHTML = loginBtn.innerHTML;
-            
-            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري تسجيل الدخول...';
-            loginBtn.disabled = true;
-            currentUser = user;
-            
-            // ✅ **الإصلاح: تحميل البيانات أولاً**
+    if (!user) {
+        showLoading(false);
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
+        handleLoginFailure(sanitizedUsername);
+        return;
+    }
+    
+    // التحقق من كلمة المرور
+    const isValidPassword = encryption.verifyPassword(password, user.password);
+    
+    if (!isValidPassword) {
+        showLoading(false);
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
+        handleLoginFailure(sanitizedUsername);
+        return;
+    }
+    
+    // ✅ نجاح تسجيل الدخول
+    loginProtection.reset();
+    
+    // إنشاء الجلسة
+    const sessionCreated = SECURE_COOKIE_SYSTEM.createSecureSession(user);
+    
+    if (!sessionCreated) {
+        console.error('❌ فشل إنشاء الجلسة');
+        showLoading(false);
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
+        alert('خطأ في إنشاء الجلسة. يرجى المحاولة مرة أخرى.');
+        return;
+    }
+    
+    // بدء الجلسة الآمنة
+    secureSession.start(user);
+    currentUser = user;
+    
+   // داخل دالة تسجيل الدخول، استبدل هذا الجزء:
 setTimeout(async () => {
     try {
-        // تحميل أحدث البيانات من Firebase أولاً
-        await loadAllDataFromFirebase();
-        
-        // ثم عرض الداشبورد
+        // 🔥 الخطوة 1: عرض الداشبورد فوراً
         showDashboard(user);
-        showSuccessMessage(`مرحباً ${user.username}! تم تسجيل الدخول بنجاح.`);
-                    
-                    // إعادة تعيين النموذج
-                    document.getElementById("loginForm").reset();
-                    captchaSystem.generate();
-                    
-                } catch (error) {
-                    console.error('❌ خطأ في عرض الداشبورد:', error);
-                    alert('حدث خطأ في تحميل لوحة التحكم. يرجى تحديث الصفحة.');
-                }
-                
-                showLoading(false);
-                
-                // تأجيل العمليات الثقيلة
-                setTimeout(async () => {
-                    try {
-                        const hashInfo = pbkdf2Encryption.parseStoredHash(user.password);
-                        if (hashInfo && hashInfo.type === 'legacy') {
-                            const newHash = pbkdf2Encryption.upgradePasswordHash(password, user.password);
-                            user.password = newHash;
-                            saveUsersToStorage();
-                            console.log('🔄 تم ترقية تشفير كلمة مرور المستخدم:', user.username);
-                            securityLog.add("PASSWORD_UPGRADED", {
-                                username: user.username,
-                                from: 'legacy',
-                                to: 'pbkdf2'
-                            });
-                        }
-                        
-                        // تأجيل مزامنة Firebase
-                        setTimeout(() => {
-                            if (firebaseInitialized && db && user) {
-                                syncToFirebase('users', [user]).then(() => {
-                                    console.log('🔥 تم مزامنة بيانات المستخدم مع Firebase');
-                                });
-                            }
-                        }, 5000);
-                        
-                    } catch (error) {
-                        console.error('❌ خطأ في العمليات الخلفية:', error);
-                    }
-                }, 1000);
-                
-                loginBtn.innerHTML = originalHTML;
-                loginBtn.disabled = false;
-                isLoggingIn = false;
-                
-                securityLog.add("LOGIN_SUCCESS", {
-                    username: sanitizedUsername,
-                    role: user.role,
-                    sessionType: 'https_cookie'
-                });
-                
-            }, 800);
-            
-        } else {
-            showLoading(false);
-            isLoggingIn = false;
-            handleLoginFailure(sanitizedUsername);
+        
+        // 🔥 الخطوة 2: تحميل بيانات المستخدم المحلية أولاً (فوري)
+        loadLocalUserData();
+        
+        // 🔥 الخطوة 3: مزامنة خفيفة مع Firebase (للمستخدم الحالي فقط)
+        if (firebaseInitialized) {
+            syncCurrentUserData(user);
         }
-    } else {
+        
+        // 🔥 الخطوة 4: تحديث كامل في الخلفية (بدون تأخير الدخول)
+        setTimeout(() => {
+            performBackgroundSync();
+        }, 3000); // بعد 3 ثواني
+        
+        // إعادة تعيين النموذج
+        document.getElementById("loginForm").reset();
+        captchaSystem.generate();
+        
+    } catch (error) {
+        console.error('❌ خطأ في عرض الداشبورد:', error);
+        alert('حدث خطأ في تحميل لوحة التحكم.');
+    } finally {
         showLoading(false);
-        isLoggingIn = false;
-        handleLoginFailure(sanitizedUsername);
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = originalHTML;
     }
+    
+    securityLog.add("LOGIN_SUCCESS", {
+        username: sanitizedUsername,
+        role: user.role
+    });
+    
+}, 300);
 }));
 
 updateDateTime();
@@ -5231,12 +5436,26 @@ document.getElementById("reg-password").addEventListener("input", (function() {
 document.getElementById("registerForm").addEventListener("submit", (function(e) {
     e.preventDefault();
     
+    // 🔥 منع التسجيل المزدوج
+    const registerBtn = document.querySelector(".create-account-btn");
+    if (registerBtn.disabled) {
+        console.log('⏳ جاري إنشاء الحساب بالفعل...');
+        return;
+    }
+    
+    // تعطيل الزر فوراً
+    registerBtn.disabled = true;
+    const originalHTML = registerBtn.innerHTML;
+    registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري الإنشاء...';
+    
     showLoading(true, 'جاري إنشاء الحساب...');
     
     try {
         CSRF_SYSTEM.validateFormSubmission(e.target);
     } catch (error) {
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
         alert(error.message);
         return;
     }
@@ -5248,6 +5467,7 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     const captchaInput = document.getElementById("reg-captcha").value.trim();
     const termsAccepted = document.getElementById("terms").checked;
     
+    // التحقق من الحقن
     const sanitizedUsername = SQL_INJECTION_PROTECTION.sanitizeInput(username);
     const sanitizedEmail = SQL_INJECTION_PROTECTION.sanitizeInput(email);
     const sanitizedCaptcha = SQL_INJECTION_PROTECTION.sanitizeInput(captchaInput);
@@ -5261,13 +5481,18 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     for (const validation of validations) {
         if (!validation.valid) {
             showLoading(false);
+            registerBtn.disabled = false;
+            registerBtn.innerHTML = originalHTML;
             alert(validation.message);
             return;
         }
     }
     
+    // التحقق من CAPTCHA
     if (!captchaSystemRegistration.validate(sanitizedCaptcha)) {
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
         alert("Invalid CAPTCHA code! Please enter the code exactly as shown (case-sensitive).");
         captchaSystemRegistration.generate();
         document.getElementById("reg-captcha").value = "";
@@ -5279,6 +5504,7 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
         return;
     }
     
+    // التحقق من صحة المدخلات
     const inputValidations = [
         inputValidation.validateUsername(sanitizedUsername),
         inputValidation.validatePassword(password),
@@ -5288,6 +5514,8 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     for (const validation of inputValidations) {
         if (!validation.valid) {
             showLoading(false);
+            registerBtn.disabled = false;
+            registerBtn.innerHTML = originalHTML;
             alert(validation.message);
             return;
         }
@@ -5295,23 +5523,31 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     
     if (!termsAccepted) {
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
         alert("You must agree to Terms & Conditions");
         return;
     }
     
     if (password !== confirmPassword) {
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
         alert("Passwords do not match!");
         return;
     }
     
+    // التحقق من عدم وجود المستخدم
     if (users.find(u => u.username === sanitizedUsername)) {
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
         alert("Username already exists! Please choose another one.");
         securityLog.add("DUPLICATE_USERNAME", { username: sanitizedUsername });
         return;
     }
     
+    // إنشاء الحساب
     const passwordHash = encryption.hashPassword(password);
     
     const newUser = {
@@ -5326,26 +5562,24 @@ document.getElementById("registerForm").addEventListener("submit", (function(e) 
     users.push(newUser);
     saveUsersToStorage();
     
-    const registerBtn = document.querySelector(".create-account-btn");
-    const originalHTML = registerBtn.innerHTML;
-    
-    registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> CREATING ACCOUNT...';
-    registerBtn.disabled = true;
-    
     setTimeout(() => {
         alert(`Account created successfully for ${sanitizedUsername}! Welcome to AHMEDTECH. You can now login with your credentials.`);
-        this.reset();
+        e.target.reset();
         document.getElementById("passwordStrength").textContent = "";
         captchaSystemRegistration.generate();
         closeRegisterModal();
+        
+        // تعبئة اسم المستخدم في نموذج الدخول
         document.getElementById("username").value = sanitizedUsername;
         document.getElementById("password").value = "";
         document.getElementById("captcha").value = "";
         captchaSystem.generate();
         document.getElementById("password").focus();
-        registerBtn.innerHTML = originalHTML;
-        registerBtn.disabled = false;
+        
         showLoading(false);
+        registerBtn.disabled = false;
+        registerBtn.innerHTML = originalHTML;
+        
         securityLog.add("REGISTER_SUCCESS", {
             username: sanitizedUsername,
             role: "user",
@@ -5462,4 +5696,83 @@ setInterval(async () => {
         }
     }
 }, 600000); // كل 10 دقائق
+// ============================================
+// 🔥 نظام التزامن بين المتصفحات
+// ============================================
+
+const CrossBrowserSync = {
+    lastSyncTime: 0,
+    syncInterval: 30000, // كل 30 ثانية
+    
+    init: function() {
+        // الاستماع لتغييرات localStorage من نوافذ أخرى
+        window.addEventListener('storage', this.handleStorageChange.bind(this));
+        
+        // بدء المزامنة الدورية
+        this.startPeriodicSync();
+        
+        console.log('🔗 نظام التزامن بين المتصفحات مفعل');
+    },
+    
+    handleStorageChange: function(event) {
+        // إذا كانت التغييرات من نافذة أخرى
+        if (event.key && event.key.includes('_timestamp') && event.newValue) {
+            console.log('🔄 تغيير في البيانات من نافذة أخرى:', event.key);
+            
+            // تحديث البيانات المحلية إذا كانت أحدث
+            this.syncDataFromTimestamp(event.key.replace('_timestamp', ''), event.newValue);
+        }
+    },
+    
+    syncDataFromTimestamp: function(dataType, remoteTimestamp) {
+        const localTimestamp = localStorage.getItem(`${dataType}_timestamp`);
+        
+        if (!localTimestamp || new Date(remoteTimestamp) > new Date(localTimestamp)) {
+            console.log(`🔄 بيانات ${dataType} في النافذة الأخرى أحدث`);
+            
+            // تحميل أحدث البيانات من Firebase
+            setTimeout(() => {
+                if (firebaseInitialized) {
+                    loadAllDataFromFirebase(true).then(updated => {
+                        if (updated) {
+                            console.log(`✅ تم تحديث ${dataType} من نافذة أخرى`);
+                        }
+                    });
+                }
+            }, 2000);
+        }
+    },
+    
+    startPeriodicSync: function() {
+        setInterval(() => {
+            if (currentUser && firebaseInitialized) {
+                this.performSync();
+            }
+        }, this.syncInterval);
+    },
+    
+    performSync: function() {
+        const now = Date.now();
+        if (now - this.lastSyncTime < 10000) return; // لا تزامن أكثر من كل 10 ثواني
+        
+        this.lastSyncTime = now;
+        
+        loadAllDataFromFirebase(true).then(success => {
+            if (success) {
+                console.log('🔄 مزامنة دورية ناجحة');
+            }
+        });
+    },
+    
+    forceSync: function() {
+        return loadAllDataFromFirebase(false); // مع عرض المؤشر
+    }
+};
+
+// تفعيل النظام عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        CrossBrowserSync.init();
+    }, 5000);
+});
 console.log("✅ ✅ ✅ النظام جاهز للنشر مع المزامنة والحماية والأداء العالي! ✅ ✅ ✅");

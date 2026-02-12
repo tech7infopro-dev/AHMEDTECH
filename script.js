@@ -106,6 +106,7 @@ class FirebaseManager {
         this.isOnline = navigator.onLine;
         this.syncEnabled = false;
         this.initPromise = null;
+        this.unsubscribers = []; // Store unsubscribe functions
         
         // بدء التهيئة فوراً
         this.initPromise = this.init();
@@ -180,8 +181,9 @@ class FirebaseManager {
 
             // Setup auto-sync interval
             this.setupAutoSync();
-            
-            this.setupRealtimeListeners();  // ✅ أضف هذا السطر
+
+            // ✅ Setup real-time listeners for cross-browser sync
+            this.setupRealtimeListeners();
 
             return true;
             
@@ -200,6 +202,200 @@ class FirebaseManager {
                 this.processOfflineQueue();
             }
         }, CONFIG.FIREBASE.SYNC.SYNC_INTERVAL || 30000);
+    }
+
+    // ✅ NEW: Setup real-time listeners for all collections
+    setupRealtimeListeners() {
+        console.log('[Firebase] Setting up real-time listeners...');
+
+        // Listen to Users collection
+        this.listenToCollection(CONFIG.FIREBASE.COLLECTIONS.USERS, 'users');
+
+        // Listen to MACs collection
+        this.listenToCollection(CONFIG.FIREBASE.COLLECTIONS.FREE_MACS, 'macs');
+
+        // Listen to Xtreams collection
+        this.listenToCollection(CONFIG.FIREBASE.COLLECTIONS.FREE_XTREAMS, 'xtreams');
+
+        // Listen to Apps collection
+        this.listenToCollection(CONFIG.FIREBASE.COLLECTIONS.IPTV_APPS, 'apps');
+
+        // Listen to Tickets collection
+        this.listenToCollection(CONFIG.FIREBASE.COLLECTIONS.TICKETS, 'tickets');
+
+        // Listen to Telegram Links
+        this.listenToTelegramLinks();
+
+        console.log('[Firebase] ✅ Real-time listeners active');
+    }
+
+    // ✅ NEW: Generic collection listener
+    listenToCollection(collectionName, dataType) {
+        if (!this.db) return;
+
+        const unsubscribe = this.db.collection(collectionName)
+            .onSnapshot((snapshot) => {
+                console.log(`[Firebase] Real-time update for ${collectionName}:`, snapshot.docs.length, 'docs');
+
+                snapshot.docChanges().forEach((change) => {
+                    const data = { id: change.doc.id, ...change.doc.data() };
+
+                    switch (change.type) {
+                        case 'added':
+                        case 'modified':
+                            this.updateLocalData(dataType, data);
+                            break;
+                        case 'removed':
+                            this.removeLocalData(dataType, data.id);
+                            break;
+                    }
+                });
+
+                // Dispatch event for UI updates
+                window.dispatchEvent(new CustomEvent('firebase-data-changed', {
+                    detail: { type: dataType, timestamp: Date.now() }
+                }));
+
+            }, (error) => {
+                console.error(`[Firebase] Listener error for ${collectionName}:`, error);
+            });
+
+        this.unsubscribers.push(unsubscribe);
+    }
+
+    // ✅ NEW: Telegram links listener
+    listenToTelegramLinks() {
+        if (!this.db) return;
+
+        const unsubscribe = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TELEGRAM_LINKS)
+            .doc('main')
+            .onSnapshot((doc) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    console.log('[Firebase] Telegram links updated');
+
+                    // Update local telegram manager
+                    if (typeof telegramManager !== 'undefined') {
+                        telegramManager.links = { ...telegramManager.links, ...data };
+                        telegramManager.saveToStorage();
+                    }
+
+                    window.dispatchEvent(new CustomEvent('firebase-data-changed', {
+                        detail: { type: 'telegram', timestamp: Date.now() }
+                    }));
+                }
+            }, (error) => {
+                console.error('[Firebase] Telegram listener error:', error);
+            });
+
+        this.unsubscribers.push(unsubscribe);
+    }
+
+    // ✅ NEW: Update local data from Firebase
+    updateLocalData(dataType, data) {
+        const id = parseInt(data.id);
+
+        switch (dataType) {
+            case 'users':
+                if (typeof userManager !== 'undefined') {
+                    const existingIndex = userManager.users.findIndex(u => u.id === id);
+                    // Don't overwrite current user's sensitive data
+                    const safeData = this.sanitizeUserData(data);
+                    if (existingIndex >= 0) {
+                        userManager.users[existingIndex] = { ...userManager.users[existingIndex], ...safeData };
+                    } else {
+                        userManager.users.push(safeData);
+                    }
+                    userManager.saveToStorage();
+                }
+                break;
+
+            case 'macs':
+                if (typeof macManager !== 'undefined') {
+                    const existingIndex = macManager.macs.findIndex(m => m.id === id);
+                    if (existingIndex >= 0) {
+                        macManager.macs[existingIndex] = data;
+                    } else {
+                        macManager.macs.push(data);
+                    }
+                    macManager.saveToStorage();
+                }
+                break;
+
+            case 'xtreams':
+                if (typeof xtreamManager !== 'undefined') {
+                    const existingIndex = xtreamManager.xtreams.findIndex(x => x.id === id);
+                    if (existingIndex >= 0) {
+                        xtreamManager.xtreams[existingIndex] = data;
+                    } else {
+                        xtreamManager.xtreams.push(data);
+                    }
+                    xtreamManager.saveToStorage();
+                }
+                break;
+
+            case 'apps':
+                if (typeof iptvAppsManager !== 'undefined') {
+                    const existingIndex = iptvAppsManager.apps.findIndex(a => a.id === id);
+                    if (existingIndex >= 0) {
+                        iptvAppsManager.apps[existingIndex] = data;
+                    } else {
+                        iptvAppsManager.apps.push(data);
+                    }
+                    iptvAppsManager.saveToStorage();
+                }
+                break;
+
+            case 'tickets':
+                if (typeof ticketManager !== 'undefined') {
+                    const existingIndex = ticketManager.tickets.findIndex(t => t.id === id);
+                    if (existingIndex >= 0) {
+                        ticketManager.tickets[existingIndex] = data;
+                    } else {
+                        ticketManager.tickets.push(data);
+                    }
+                    ticketManager.saveToStorage();
+                }
+                break;
+        }
+    }
+
+    // ✅ NEW: Remove local data when deleted from Firebase
+    removeLocalData(dataType, docId) {
+        const id = parseInt(docId);
+
+        switch (dataType) {
+            case 'users':
+                if (typeof userManager !== 'undefined') {
+                    userManager.users = userManager.users.filter(u => u.id !== id);
+                    userManager.saveToStorage();
+                }
+                break;
+            case 'macs':
+                if (typeof macManager !== 'undefined') {
+                    macManager.macs = macManager.macs.filter(m => m.id !== id);
+                    macManager.saveToStorage();
+                }
+                break;
+            case 'xtreams':
+                if (typeof xtreamManager !== 'undefined') {
+                    xtreamManager.xtreams = xtreamManager.xtreams.filter(x => x.id !== id);
+                    xtreamManager.saveToStorage();
+                }
+                break;
+            case 'apps':
+                if (typeof iptvAppsManager !== 'undefined') {
+                    iptvAppsManager.apps = iptvAppsManager.apps.filter(a => a.id !== id);
+                    iptvAppsManager.saveToStorage();
+                }
+                break;
+            case 'tickets':
+                if (typeof ticketManager !== 'undefined') {
+                    ticketManager.tickets = ticketManager.tickets.filter(t => t.id !== id);
+                    ticketManager.saveToStorage();
+                }
+                break;
+        }
     }
 
     async ensureInitialized() {
@@ -254,129 +450,6 @@ class FirebaseManager {
         delete safe.passwordHash;
         delete safe.salt;
         return safe;
-    }
-
-    // ✅ جديد: إعداد مستمعي التغييرات الفورية
-    setupRealtimeListeners() {
-        if (!this.isInitialized || !this.db) return;
-        
-        console.log('[Firebase] Setting up real-time listeners...');
-        
-        // Users listener
-        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.USERS)
-            .onSnapshot((snapshot) => {
-                this.handleUsersSnapshot(snapshot);
-            });
-        
-        // MACs listener  
-        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_MACS)
-            .onSnapshot((snapshot) => {
-                this.handleMACsSnapshot(snapshot);
-            });
-        
-        // Xtreams listener
-        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_XTREAMS)
-            .onSnapshot((snapshot) => {
-                this.handleXtreamsSnapshot(snapshot);
-            });
-        
-        // Apps listener
-        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.IPTV_APPS)
-            .onSnapshot((snapshot) => {
-                this.handleAppsSnapshot(snapshot);
-            });
-        
-        console.log('[Firebase] ✅ Real-time listeners active');
-    }
-
-    // ✅ معالجة التحديثات من Firebase
-    handleUsersSnapshot(snapshot) {
-        const firebaseUsers = [];
-        snapshot.forEach(doc => {
-            const data = doc.data();
-            firebaseUsers.push({ ...data, id: parseInt(doc.id) });
-        });
-        
-        if (firebaseUsers.length === 0) return;
-        
-        const localUsers = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.USERS) || [];
-        const merged = [...localUsers];
-        
-        firebaseUsers.forEach(fbUser => {
-            const index = merged.findIndex(u => u.id === fbUser.id);
-            if (index === -1) {
-                merged.push(fbUser);
-            }
-        });
-        
-        securityManager.secureStore(CONFIG.STORAGE_KEYS.USERS, merged);
-        if (typeof userManager !== 'undefined') {
-            userManager.users = merged;
-        }
-        
-        if (document.getElementById('user-management-section')?.style.display !== 'none') {
-            updateUsersTable();
-        }
-    }
-
-    handleMACsSnapshot(snapshot) {
-        const firebaseMACs = [];
-        snapshot.forEach(doc => firebaseMACs.push({ ...doc.data(), id: parseInt(doc.id) }));
-        
-        const localMACs = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.FREE_MACS) || [];
-        const merged = [...localMACs];
-        
-        firebaseMACs.forEach(fbMac => {
-            const index = merged.findIndex(m => m.id === fbMac.id);
-            if (index === -1) merged.push(fbMac);
-        });
-        
-        securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_MACS, merged);
-        if (typeof macManager !== 'undefined') macManager.macs = merged;
-        
-        if (document.getElementById('free-mac-section')?.style.display !== 'none') {
-            updateFreeMACCards();
-        }
-    }
-
-    handleXtreamsSnapshot(snapshot) {
-        const firebaseXtreams = [];
-        snapshot.forEach(doc => firebaseXtreams.push({ ...doc.data(), id: parseInt(doc.id) }));
-        
-        const localXtreams = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.FREE_XTREAMS) || [];
-        const merged = [...localXtreams];
-        
-        firebaseXtreams.forEach(fbX => {
-            const index = merged.findIndex(x => x.id === fbX.id);
-            if (index === -1) merged.push(fbX);
-        });
-        
-        securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_XTREAMS, merged);
-        if (typeof xtreamManager !== 'undefined') xtreamManager.xtreams = merged;
-        
-        if (document.getElementById('free-xtream-section')?.style.display !== 'none') {
-            updateFreeXtreamCards();
-        }
-    }
-
-    handleAppsSnapshot(snapshot) {
-        const firebaseApps = [];
-        snapshot.forEach(doc => firebaseApps.push({ ...doc.data(), id: parseInt(doc.id) }));
-        
-        const localApps = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.IPTV_APPS) || [];
-        const merged = [...localApps];
-        
-        firebaseApps.forEach(fbApp => {
-            const index = merged.findIndex(a => a.id === fbApp.id);
-            if (index === -1) merged.push(fbApp);
-        });
-        
-        securityManager.secureStore(CONFIG.STORAGE_KEYS.IPTV_APPS, merged);
-        if (typeof iptvAppsManager !== 'undefined') iptvAppsManager.apps = merged;
-        
-        if (document.getElementById('iptv-apps-section')?.style.display !== 'none') {
-            updateIPTVAppsCards();
-        }
     }
 
     // ==========================================
@@ -2176,22 +2249,34 @@ class UserManagement {
         }};
     }
 
-        async deleteUser(id) {
+    async deleteUser(id) {
         if (!this.canPerformAction('delete_user')) {
             return { success: false, message: "You don't have permission to delete users" };
         }
 
         const userIndex = this.users.findIndex(u => u.id === id);
-        if (userIndex === -1) return { success: false, message: "User not found" };
-        if (this.users[userIndex].id === 1) return { success: false, message: "Cannot delete the main owner account" };
+
+        if (userIndex === -1) {
+            return { success: false, message: "User not found" };
+        }
+
+        if (this.users[userIndex].id === 1) {
+            return { success: false, message: "Cannot delete the main owner account" };
+        }
+
+        if (this.users[userIndex].role === 'owner' && this.currentUser.role !== 'owner') {
+            securityManager.logSecurityEvent('UNAUTHORIZED_OWNER_DELETION', { 
+                attemptedBy: this.currentUser.username,
+                targetUserId: id 
+            });
+            return { success: false, message: "Only owner can delete other owner accounts" };
+        }
+
+        if (this.users[userIndex].role === 'admin' && this.currentUser.role === 'admin') {
+            return { success: false, message: "Admin cannot delete other admin accounts" };
+        }
 
         const deletedUsername = this.users[userIndex].username;
-        
-        // ✅ حذف من Firebase أولاً
-        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
-            await firebaseManager.deleteUser(id);
-        }
-        
         this.users.splice(userIndex, 1);
         await this.saveToStorage();
 
@@ -2515,17 +2600,19 @@ class FreeMACManager {
         return { success: true, mac: this.macs[macIndex] };
     }
 
-        deleteMAC(id) {
+    deleteMAC(id) {
         const macIndex = this.macs.findIndex(mac => mac.id === id);
-        if (macIndex === -1) return { success: false, message: "MAC not found" };
 
-        // ✅ حذف من Firebase أولاً
-        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
-            firebaseManager.deleteMAC(id);
+        if (macIndex === -1) {
+            return { success: false, message: "MAC not found" };
         }
 
         this.macs.splice(macIndex, 1);
-        this.saveToStorage();
+        
+        // ✅ مزامنة فورية غير متزامنة
+        this.saveToStorage().then(() => {
+            console.log('[MACManager] MAC deleted and synced:', id);
+        });
 
         securityManager.logSecurityEvent('MAC_DELETED', { 
             macId: id,
@@ -2811,17 +2898,19 @@ class FreeXtreamManager {
         return { success: true, xtream: this.xtreams[xtreamIndex] };
     }
 
-        deleteXtream(id) {
+    deleteXtream(id) {
         const xtreamIndex = this.xtreams.findIndex(xtream => xtream.id === id);
-        if (xtreamIndex === -1) return { success: false, message: "Xtream not found" };
 
-        // ✅ حذف من Firebase أولاً
-        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
-            firebaseManager.deleteXtream(id);
+        if (xtreamIndex === -1) {
+            return { success: false, message: "Xtream not found" };
         }
 
         this.xtreams.splice(xtreamIndex, 1);
-        this.saveToStorage();
+        
+        // ✅ مزامنة فورية غير متزامنة
+        this.saveToStorage().then(() => {
+            console.log('[XtreamManager] Xtream deleted and synced:', id);
+        });
 
         securityManager.logSecurityEvent('XTREAM_DELETED', { 
             xtreamId: id,
@@ -3511,17 +3600,19 @@ class IPTVAppsManager {
         return { success: true, app: this.apps[appIndex] };
     }
 
-        deleteApp(id) {
+    deleteApp(id) {
         const appIndex = this.apps.findIndex(app => app.id === id);
-        if (appIndex === -1) return { success: false, message: "App not found" };
 
-        // ✅ حذف من Firebase أولاً
-        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
-            firebaseManager.deleteApp(id);
+        if (appIndex === -1) {
+            return { success: false, message: "App not found" };
         }
 
         this.apps.splice(appIndex, 1);
-        this.saveToStorage();
+        
+        // ✅ مزامنة فورية غير متزامنة
+        this.saveToStorage().then(() => {
+            console.log('[AppsManager] App deleted and synced:', id);
+        });
 
         securityManager.logSecurityEvent('APP_DELETED', { 
             appId: id,
@@ -4635,16 +4726,16 @@ function updateUsersTable() {
     });
 
     document.querySelectorAll('.ban-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', async function() {
             const userId = parseInt(this.dataset.userId);
-            banUser(userId);
+            await banUser(userId);
         });
     });
 
     document.querySelectorAll('.unban-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', async function() {
             const userId = parseInt(this.dataset.userId);
-            unbanUser(userId);
+            await unbanUser(userId);
         });
     });
 
@@ -5436,10 +5527,10 @@ document.getElementById('deleteModalCancel').addEventListener('click', function(
     document.getElementById('deleteUserModal').classList.remove('active');
 });
 
-document.getElementById('deleteModalConfirm').addEventListener('click', function() {
+document.getElementById('deleteModalConfirm').addEventListener('click', async function() {
     const userId = parseInt(document.getElementById('deleteUserModal').dataset.userId);
 
-    const result = userManager.deleteUser(userId);
+    const result = await userManager.deleteUser(userId);
 
     if (result.success) {
         notificationSystem.success('Success', 'User deleted successfully', 3);
@@ -6134,3 +6225,177 @@ setTimeout(() => {
 }, 2000);
 
 console.log('✅ AHMEDTECH DZ IPTV System Loaded Successfully');
+// ============================================
+// FIREBASE DATA LOADER - Add this at the end of script.js
+// ============================================
+
+async function loadAllDataFromFirebase() {
+  console.log('[DataLoader] Loading data from Firebase...');
+  
+  if (!firebaseManager.isInitialized) {
+    console.warn('[DataLoader] Firebase not initialized, using localStorage only');
+    return;
+  }
+  
+  try {
+    // Load Users
+    const usersResult = await firebaseManager.getAllUsers();
+    if (usersResult.success && usersResult.users.length > 0) {
+      // Merge with local users (avoid duplicates)
+      const existingIds = userManager.users.map(u => u.id);
+      const newUsers = usersResult.users.filter(u => !existingIds.includes(parseInt(u.id)));
+      
+      if (newUsers.length > 0) {
+        userManager.users = [...userManager.users, ...newUsers];
+        await userManager.saveToStorage();
+        console.log(`[DataLoader] Loaded ${newUsers.length} new users from Firebase`);
+      }
+    }
+    
+    // Load MACs
+    const macsResult = await firebaseManager.getAllMACs();
+    if (macsResult.success && macsResult.macs.length > 0) {
+      const existingIds = macManager.macs.map(m => m.id);
+      const newMacs = macsResult.macs.filter(m => !existingIds.includes(parseInt(m.id)));
+      
+      if (newMacs.length > 0) {
+        macManager.macs = [...macManager.macs, ...newMacs];
+        await macManager.saveToStorage();
+        console.log(`[DataLoader] Loaded ${newMacs.length} new MACs from Firebase`);
+      }
+    }
+    
+    // Load Xtreams
+    const xtreamsResult = await firebaseManager.getAllXtreams();
+    if (xtreamsResult.success && xtreamsResult.xtreams.length > 0) {
+      const existingIds = xtreamManager.xtreams.map(x => x.id);
+      const newXtreams = xtreamsResult.xtreams.filter(x => !existingIds.includes(parseInt(x.id)));
+      
+      if (newXtreams.length > 0) {
+        xtreamManager.xtreams = [...xtreamManager.xtreams, ...newXtreams];
+        await xtreamManager.saveToStorage();
+        console.log(`[DataLoader] Loaded ${newXtreams.length} new Xtreams from Firebase`);
+      }
+    }
+    
+    // Load Apps
+    const appsResult = await firebaseManager.getAllApps();
+    if (appsResult.success && appsResult.apps.length > 0) {
+      const existingIds = iptvAppsManager.apps.map(a => a.id);
+      const newApps = appsResult.apps.filter(a => !existingIds.includes(parseInt(a.id)));
+      
+      if (newApps.length > 0) {
+        iptvAppsManager.apps = [...iptvAppsManager.apps, ...newApps];
+        await iptvAppsManager.saveToStorage();
+        console.log(`[DataLoader] Loaded ${newApps.length} new Apps from Firebase`);
+      }
+    }
+    
+    // Load Telegram Links
+    const telegramResult = await firebaseManager.getTelegramLinks();
+    if (telegramResult.success && telegramResult.links) {
+      telegramManager.links = { ...telegramManager.links, ...telegramResult.links };
+      await telegramManager.saveToStorage();
+      console.log('[DataLoader] Loaded Telegram links from Firebase');
+    }
+    
+    // Refresh UI if needed
+    if (document.getElementById('user-management-section').style.display !== 'none') {
+      updateUsersTable();
+    }
+    if (document.getElementById('free-mac-section').style.display !== 'none') {
+      updateFreeMACCards();
+    }
+    if (document.getElementById('free-xtream-section').style.display !== 'none') {
+      updateFreeXtreamCards();
+    }
+    if (document.getElementById('iptv-apps-section').style.display !== 'none') {
+      updateIPTVAppsCards();
+    }
+    if (document.getElementById('telegram-section').style.display !== 'none') {
+      updateTelegramCards();
+    }
+    
+    console.log('[DataLoader] ✅ Data loading complete');
+    notificationSystem.success('Sync Complete', 'Data loaded from Firebase successfully', 3);
+    
+  } catch (error) {
+    console.error('[DataLoader] ❌ Error loading data:', error);
+  }
+}
+
+// Auto-load data when Firebase is ready
+window.addEventListener('firebase-sync', function(e) {
+  console.log('[DataLoader] Firebase sync event received');
+});
+
+// Load data on page load after Firebase initializes
+window.addEventListener('load', async function() {
+  // Wait for Firebase to initialize
+  let attempts = 0;
+  const maxAttempts = 50; // 5 seconds max
+  
+  while (!firebaseManager.isInitialized && attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    attempts++;
+  }
+  
+  if (firebaseManager.isInitialized) {
+    console.log('[DataLoader] Firebase ready, loading data...');
+    await loadAllDataFromFirebase();
+  } else {
+    console.warn('[DataLoader] Firebase failed to initialize, using local data only');
+  }
+});
+
+
+// ============================================
+// REAL-TIME UI UPDATE LISTENER
+// ============================================
+window.addEventListener('firebase-data-changed', function(e) {
+    console.log('[UI] Firebase data changed event received:', e.detail.type);
+
+    // Update the appropriate UI section based on data type
+    const currentSection = document.querySelector('section[style*="display: block"]');
+    if (!currentSection) return;
+
+    const sectionId = currentSection.id;
+
+    switch(e.detail.type) {
+        case 'users':
+            if (sectionId === 'user-management-section') {
+                updateUsersTable();
+            }
+            break;
+        case 'macs':
+            if (sectionId === 'free-mac-section') {
+                updateFreeMACCards();
+            }
+            break;
+        case 'xtreams':
+            if (sectionId === 'free-xtream-section') {
+                updateFreeXtreamCards();
+            }
+            break;
+        case 'apps':
+            if (sectionId === 'iptv-apps-section') {
+                updateIPTVAppsCards();
+            }
+            break;
+        case 'tickets':
+            if (sectionId === 'ticket-section') {
+                updateTicketsList();
+            }
+            break;
+        case 'telegram':
+            if (sectionId === 'telegram-section') {
+                updateTelegramCards();
+            }
+            break;
+    }
+
+    // Also update dashboard stats if visible
+    if (sectionId === 'dashboard-section') {
+        updateDashboardCards();
+    }
+});

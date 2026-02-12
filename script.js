@@ -723,31 +723,24 @@ class FirebaseManager {
     }
 
     // ✅ جديد: حذف App من Firebase
-        async deleteApp(id) {
-        const appIndex = this.apps.findIndex(app => app.id === id);
-
-        if (appIndex === -1) {
-            return { success: false, message: "App not found" };
-        }
-
-        // ✅ حذف من Firebase أولاً
-        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
-            console.log('[AppsManager] Deleting App from Firebase:', id);
-            await firebaseManager.deleteApp(id);
-        }
-
-        this.apps.splice(appIndex, 1);
+    async deleteApp(appId) {
+        await this.ensureInitialized();
         
-        this.saveToStorage().then(() => {
-            console.log('[AppsManager] App deleted and synced:', id);
-        });
+        if (!this.shouldSync()) {
+            this.queueOperation('deleteApp', { appId });
+            return { success: false, offline: true };
+        }
 
-        securityManager.logSecurityEvent('APP_DELETED', { 
-            appId: id,
-            deletedBy: userManager.currentUser ? userManager.currentUser.username : 'system'
-        });
-
-        return { success: true };
+        try {
+            await this.db.collection(CONFIG.FIREBASE.COLLECTIONS.IPTV_APPS)
+                        .doc(appId.toString()).delete();
+            console.log('[Firebase] ✅ App deleted:', appId);
+            return { success: true };
+        } catch (error) {
+            console.error('[Firebase] ❌ Delete app error:', error);
+            this.queueOperation('deleteApp', { appId });
+            return { success: false, error: error.message };
+        }
     }
 
     async getAllApps() {

@@ -180,6 +180,8 @@ class FirebaseManager {
 
             // Setup auto-sync interval
             this.setupAutoSync();
+            
+            this.setupRealtimeListeners();  // ✅ أضف هذا السطر
 
             return true;
             
@@ -252,6 +254,129 @@ class FirebaseManager {
         delete safe.passwordHash;
         delete safe.salt;
         return safe;
+    }
+
+    // ✅ جديد: إعداد مستمعي التغييرات الفورية
+    setupRealtimeListeners() {
+        if (!this.isInitialized || !this.db) return;
+        
+        console.log('[Firebase] Setting up real-time listeners...');
+        
+        // Users listener
+        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.USERS)
+            .onSnapshot((snapshot) => {
+                this.handleUsersSnapshot(snapshot);
+            });
+        
+        // MACs listener  
+        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_MACS)
+            .onSnapshot((snapshot) => {
+                this.handleMACsSnapshot(snapshot);
+            });
+        
+        // Xtreams listener
+        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_XTREAMS)
+            .onSnapshot((snapshot) => {
+                this.handleXtreamsSnapshot(snapshot);
+            });
+        
+        // Apps listener
+        this.db.collection(CONFIG.FIREBASE.COLLECTIONS.IPTV_APPS)
+            .onSnapshot((snapshot) => {
+                this.handleAppsSnapshot(snapshot);
+            });
+        
+        console.log('[Firebase] ✅ Real-time listeners active');
+    }
+
+    // ✅ معالجة التحديثات من Firebase
+    handleUsersSnapshot(snapshot) {
+        const firebaseUsers = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            firebaseUsers.push({ ...data, id: parseInt(doc.id) });
+        });
+        
+        if (firebaseUsers.length === 0) return;
+        
+        const localUsers = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.USERS) || [];
+        const merged = [...localUsers];
+        
+        firebaseUsers.forEach(fbUser => {
+            const index = merged.findIndex(u => u.id === fbUser.id);
+            if (index === -1) {
+                merged.push(fbUser);
+            }
+        });
+        
+        securityManager.secureStore(CONFIG.STORAGE_KEYS.USERS, merged);
+        if (typeof userManager !== 'undefined') {
+            userManager.users = merged;
+        }
+        
+        if (document.getElementById('user-management-section')?.style.display !== 'none') {
+            updateUsersTable();
+        }
+    }
+
+    handleMACsSnapshot(snapshot) {
+        const firebaseMACs = [];
+        snapshot.forEach(doc => firebaseMACs.push({ ...doc.data(), id: parseInt(doc.id) }));
+        
+        const localMACs = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.FREE_MACS) || [];
+        const merged = [...localMACs];
+        
+        firebaseMACs.forEach(fbMac => {
+            const index = merged.findIndex(m => m.id === fbMac.id);
+            if (index === -1) merged.push(fbMac);
+        });
+        
+        securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_MACS, merged);
+        if (typeof macManager !== 'undefined') macManager.macs = merged;
+        
+        if (document.getElementById('free-mac-section')?.style.display !== 'none') {
+            updateFreeMACCards();
+        }
+    }
+
+    handleXtreamsSnapshot(snapshot) {
+        const firebaseXtreams = [];
+        snapshot.forEach(doc => firebaseXtreams.push({ ...doc.data(), id: parseInt(doc.id) }));
+        
+        const localXtreams = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.FREE_XTREAMS) || [];
+        const merged = [...localXtreams];
+        
+        firebaseXtreams.forEach(fbX => {
+            const index = merged.findIndex(x => x.id === fbX.id);
+            if (index === -1) merged.push(fbX);
+        });
+        
+        securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_XTREAMS, merged);
+        if (typeof xtreamManager !== 'undefined') xtreamManager.xtreams = merged;
+        
+        if (document.getElementById('free-xtream-section')?.style.display !== 'none') {
+            updateFreeXtreamCards();
+        }
+    }
+
+    handleAppsSnapshot(snapshot) {
+        const firebaseApps = [];
+        snapshot.forEach(doc => firebaseApps.push({ ...doc.data(), id: parseInt(doc.id) }));
+        
+        const localApps = securityManager.secureRetrieve(CONFIG.STORAGE_KEYS.IPTV_APPS) || [];
+        const merged = [...localApps];
+        
+        firebaseApps.forEach(fbApp => {
+            const index = merged.findIndex(a => a.id === fbApp.id);
+            if (index === -1) merged.push(fbApp);
+        });
+        
+        securityManager.secureStore(CONFIG.STORAGE_KEYS.IPTV_APPS, merged);
+        if (typeof iptvAppsManager !== 'undefined') iptvAppsManager.apps = merged;
+        
+        if (document.getElementById('iptv-apps-section')?.style.display !== 'none') {
+            updateIPTVAppsCards();
+        }
     }
 
     // ==========================================
@@ -2051,34 +2176,22 @@ class UserManagement {
         }};
     }
 
-    async deleteUser(id) {
+        async deleteUser(id) {
         if (!this.canPerformAction('delete_user')) {
             return { success: false, message: "You don't have permission to delete users" };
         }
 
         const userIndex = this.users.findIndex(u => u.id === id);
-
-        if (userIndex === -1) {
-            return { success: false, message: "User not found" };
-        }
-
-        if (this.users[userIndex].id === 1) {
-            return { success: false, message: "Cannot delete the main owner account" };
-        }
-
-        if (this.users[userIndex].role === 'owner' && this.currentUser.role !== 'owner') {
-            securityManager.logSecurityEvent('UNAUTHORIZED_OWNER_DELETION', { 
-                attemptedBy: this.currentUser.username,
-                targetUserId: id 
-            });
-            return { success: false, message: "Only owner can delete other owner accounts" };
-        }
-
-        if (this.users[userIndex].role === 'admin' && this.currentUser.role === 'admin') {
-            return { success: false, message: "Admin cannot delete other admin accounts" };
-        }
+        if (userIndex === -1) return { success: false, message: "User not found" };
+        if (this.users[userIndex].id === 1) return { success: false, message: "Cannot delete the main owner account" };
 
         const deletedUsername = this.users[userIndex].username;
+        
+        // ✅ حذف من Firebase أولاً
+        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
+            await firebaseManager.deleteUser(id);
+        }
+        
         this.users.splice(userIndex, 1);
         await this.saveToStorage();
 
@@ -2402,19 +2515,17 @@ class FreeMACManager {
         return { success: true, mac: this.macs[macIndex] };
     }
 
-    deleteMAC(id) {
+        deleteMAC(id) {
         const macIndex = this.macs.findIndex(mac => mac.id === id);
+        if (macIndex === -1) return { success: false, message: "MAC not found" };
 
-        if (macIndex === -1) {
-            return { success: false, message: "MAC not found" };
+        // ✅ حذف من Firebase أولاً
+        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
+            firebaseManager.deleteMAC(id);
         }
 
         this.macs.splice(macIndex, 1);
-        
-        // ✅ مزامنة فورية غير متزامنة
-        this.saveToStorage().then(() => {
-            console.log('[MACManager] MAC deleted and synced:', id);
-        });
+        this.saveToStorage();
 
         securityManager.logSecurityEvent('MAC_DELETED', { 
             macId: id,
@@ -2700,19 +2811,17 @@ class FreeXtreamManager {
         return { success: true, xtream: this.xtreams[xtreamIndex] };
     }
 
-    deleteXtream(id) {
+        deleteXtream(id) {
         const xtreamIndex = this.xtreams.findIndex(xtream => xtream.id === id);
+        if (xtreamIndex === -1) return { success: false, message: "Xtream not found" };
 
-        if (xtreamIndex === -1) {
-            return { success: false, message: "Xtream not found" };
+        // ✅ حذف من Firebase أولاً
+        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
+            firebaseManager.deleteXtream(id);
         }
 
         this.xtreams.splice(xtreamIndex, 1);
-        
-        // ✅ مزامنة فورية غير متزامنة
-        this.saveToStorage().then(() => {
-            console.log('[XtreamManager] Xtream deleted and synced:', id);
-        });
+        this.saveToStorage();
 
         securityManager.logSecurityEvent('XTREAM_DELETED', { 
             xtreamId: id,
@@ -3402,19 +3511,17 @@ class IPTVAppsManager {
         return { success: true, app: this.apps[appIndex] };
     }
 
-    deleteApp(id) {
+        deleteApp(id) {
         const appIndex = this.apps.findIndex(app => app.id === id);
+        if (appIndex === -1) return { success: false, message: "App not found" };
 
-        if (appIndex === -1) {
-            return { success: false, message: "App not found" };
+        // ✅ حذف من Firebase أولاً
+        if (typeof firebaseManager !== 'undefined' && firebaseManager.isInitialized) {
+            firebaseManager.deleteApp(id);
         }
 
         this.apps.splice(appIndex, 1);
-        
-        // ✅ مزامنة فورية غير متزامنة
-        this.saveToStorage().then(() => {
-            console.log('[AppsManager] App deleted and synced:', id);
-        });
+        this.saveToStorage();
 
         securityManager.logSecurityEvent('APP_DELETED', { 
             appId: id,
@@ -6027,154 +6134,3 @@ setTimeout(() => {
 }, 2000);
 
 console.log('✅ AHMEDTECH DZ IPTV System Loaded Successfully');
-// ============================================
-// FIREBASE SYNC FIX - Add at end of script.js
-// ============================================
-
-// Override delete functions to sync with Firebase
-const originalDeleteUser = userManager.deleteUser.bind(userManager);
-userManager.deleteUser = async function(userId) {
-  const result = await originalDeleteUser(userId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteUser(userId);
-    console.log('[Sync] User deleted from Firebase:', userId);
-  }
-  return result;
-};
-
-const originalDeleteMAC = macManager.deleteMAC.bind(macManager);
-macManager.deleteMAC = async function(macId) {
-  const result = await originalDeleteMAC(macId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteMAC(macId);
-    console.log('[Sync] MAC deleted from Firebase:', macId);
-  }
-  return result;
-};
-
-const originalDeleteXtream = xtreamManager.deleteXtream.bind(xtreamManager);
-xtreamManager.deleteXtream = async function(xtreamId) {
-  const result = await originalDeleteXtream(xtreamId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteXtream(xtreamId);
-    console.log('[Sync] Xtream deleted from Firebase:', xtreamId);
-  }
-  return result;
-};
-
-const originalDeleteApp = iptvAppsManager.deleteApp.bind(iptvAppsManager);
-iptvAppsManager.deleteApp = async function(appId) {
-  const result = await originalDeleteApp(appId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteApp(appId);
-    console.log('[Sync] App deleted from Firebase:', appId);
-  }
-  return result;
-};
-
-// ============================================
-// AUTO SYNC FROM FIREBASE ON LOAD
-// ============================================
-
-async function syncFromFirebase() {
-  console.log('[Sync] Starting Firebase sync...');
-  
-  if (!firebaseManager.isInitialized) {
-    console.warn('[Sync] Firebase not initialized');
-    return;
-  }
-  
-  try {
-    // Sync Users
-    const usersResult = await firebaseManager.getAllUsers();
-    if (usersResult.success) {
-      const firebaseUsers = usersResult.users.map(u => ({...u, id: parseInt(u.id)}));
-      const localIds = userManager.users.map(u => u.id);
-      const newUsers = firebaseUsers.filter(u => !localIds.includes(u.id));
-      
-      if (newUsers.length > 0) {
-        userManager.users = [...userManager.users, ...newUsers];
-        await userManager.saveToStorage();
-        console.log(`[Sync] Added ${newUsers.length} users from Firebase`);
-      }
-    }
-    
-    // Sync MACs
-    const macsResult = await firebaseManager.getAllMACs();
-    if (macsResult.success) {
-      const firebaseMacs = macsResult.macs.map(m => ({...m, id: parseInt(m.id)}));
-      const localIds = macManager.macs.map(m => m.id);
-      const newMacs = firebaseMacs.filter(m => !localIds.includes(m.id));
-      
-      if (newMacs.length > 0) {
-        macManager.macs = [...macManager.macs, ...newMacs];
-        await macManager.saveToStorage();
-        console.log(`[Sync] Added ${newMacs.length} MACs from Firebase`);
-      }
-    }
-    
-    // Sync Xtreams
-    const xtreamsResult = await firebaseManager.getAllXtreams();
-    if (xtreamsResult.success) {
-      const firebaseXtreams = xtreamsResult.xtreams.map(x => ({...x, id: parseInt(x.id)}));
-      const localIds = xtreamManager.xtreams.map(x => x.id);
-      const newXtreams = firebaseXtreams.filter(x => !localIds.includes(x.id));
-      
-      if (newXtreams.length > 0) {
-        xtreamManager.xtreams = [...xtreamManager.xtreams, ...newXtreams];
-        await xtreamManager.saveToStorage();
-        console.log(`[Sync] Added ${newXtreams.length} Xtreams from Firebase`);
-      }
-    }
-    
-    // Sync Apps
-    const appsResult = await firebaseManager.getAllApps();
-    if (appsResult.success) {
-      const firebaseApps = appsResult.apps.map(a => ({...a, id: parseInt(a.id)}));
-      const localIds = iptvAppsManager.apps.map(a => a.id);
-      const newApps = firebaseApps.filter(a => !localIds.includes(a.id));
-      
-      if (newApps.length > 0) {
-        iptvAppsManager.apps = [...iptvAppsManager.apps, ...newApps];
-        await iptvAppsManager.saveToStorage();
-        console.log(`[Sync] Added ${newApps.length} Apps from Firebase`);
-      }
-    }
-    
-    // Sync Telegram
-    const telegramResult = await firebaseManager.getTelegramLinks();
-    if (telegramResult.success && telegramResult.links) {
-      telegramManager.links = telegramResult.links;
-      await telegramManager.saveToStorage();
-      console.log('[Sync] Telegram links updated');
-    }
-    
-    console.log('[Sync] ✅ Sync complete');
-    
-  } catch (error) {
-    console.error('[Sync] ❌ Error:', error);
-  }
-}
-
-// Run sync on page load
-window.addEventListener('load', async () => {
-  // Wait for Firebase
-  let attempts = 0;
-  while (!firebaseManager.isInitialized && attempts < 30) {
-    await new Promise(r => setTimeout(r, 100));
-    attempts++;
-  }
-  
-  if (firebaseManager.isInitialized) {
-    await syncFromFirebase();
-  }
-});
-
-// Auto sync every 30 seconds
-setInterval(() => {
-  if (firebaseManager.isInitialized) {
-    syncFromFirebase();
-  }
-}, 30000);
-
-console.log('✅ Firebase Sync Fix Loaded');

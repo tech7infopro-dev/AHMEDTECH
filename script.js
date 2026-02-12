@@ -6027,3 +6027,154 @@ setTimeout(() => {
 }, 2000);
 
 console.log('✅ AHMEDTECH DZ IPTV System Loaded Successfully');
+// ============================================
+// FIREBASE SYNC FIX - Add at end of script.js
+// ============================================
+
+// Override delete functions to sync with Firebase
+const originalDeleteUser = userManager.deleteUser.bind(userManager);
+userManager.deleteUser = async function(userId) {
+  const result = await originalDeleteUser(userId);
+  if (result.success && firebaseManager.isInitialized) {
+    await firebaseManager.deleteUser(userId);
+    console.log('[Sync] User deleted from Firebase:', userId);
+  }
+  return result;
+};
+
+const originalDeleteMAC = macManager.deleteMAC.bind(macManager);
+macManager.deleteMAC = async function(macId) {
+  const result = await originalDeleteMAC(macId);
+  if (result.success && firebaseManager.isInitialized) {
+    await firebaseManager.deleteMAC(macId);
+    console.log('[Sync] MAC deleted from Firebase:', macId);
+  }
+  return result;
+};
+
+const originalDeleteXtream = xtreamManager.deleteXtream.bind(xtreamManager);
+xtreamManager.deleteXtream = async function(xtreamId) {
+  const result = await originalDeleteXtream(xtreamId);
+  if (result.success && firebaseManager.isInitialized) {
+    await firebaseManager.deleteXtream(xtreamId);
+    console.log('[Sync] Xtream deleted from Firebase:', xtreamId);
+  }
+  return result;
+};
+
+const originalDeleteApp = iptvAppsManager.deleteApp.bind(iptvAppsManager);
+iptvAppsManager.deleteApp = async function(appId) {
+  const result = await originalDeleteApp(appId);
+  if (result.success && firebaseManager.isInitialized) {
+    await firebaseManager.deleteApp(appId);
+    console.log('[Sync] App deleted from Firebase:', appId);
+  }
+  return result;
+};
+
+// ============================================
+// AUTO SYNC FROM FIREBASE ON LOAD
+// ============================================
+
+async function syncFromFirebase() {
+  console.log('[Sync] Starting Firebase sync...');
+  
+  if (!firebaseManager.isInitialized) {
+    console.warn('[Sync] Firebase not initialized');
+    return;
+  }
+  
+  try {
+    // Sync Users
+    const usersResult = await firebaseManager.getAllUsers();
+    if (usersResult.success) {
+      const firebaseUsers = usersResult.users.map(u => ({...u, id: parseInt(u.id)}));
+      const localIds = userManager.users.map(u => u.id);
+      const newUsers = firebaseUsers.filter(u => !localIds.includes(u.id));
+      
+      if (newUsers.length > 0) {
+        userManager.users = [...userManager.users, ...newUsers];
+        await userManager.saveToStorage();
+        console.log(`[Sync] Added ${newUsers.length} users from Firebase`);
+      }
+    }
+    
+    // Sync MACs
+    const macsResult = await firebaseManager.getAllMACs();
+    if (macsResult.success) {
+      const firebaseMacs = macsResult.macs.map(m => ({...m, id: parseInt(m.id)}));
+      const localIds = macManager.macs.map(m => m.id);
+      const newMacs = firebaseMacs.filter(m => !localIds.includes(m.id));
+      
+      if (newMacs.length > 0) {
+        macManager.macs = [...macManager.macs, ...newMacs];
+        await macManager.saveToStorage();
+        console.log(`[Sync] Added ${newMacs.length} MACs from Firebase`);
+      }
+    }
+    
+    // Sync Xtreams
+    const xtreamsResult = await firebaseManager.getAllXtreams();
+    if (xtreamsResult.success) {
+      const firebaseXtreams = xtreamsResult.xtreams.map(x => ({...x, id: parseInt(x.id)}));
+      const localIds = xtreamManager.xtreams.map(x => x.id);
+      const newXtreams = firebaseXtreams.filter(x => !localIds.includes(x.id));
+      
+      if (newXtreams.length > 0) {
+        xtreamManager.xtreams = [...xtreamManager.xtreams, ...newXtreams];
+        await xtreamManager.saveToStorage();
+        console.log(`[Sync] Added ${newXtreams.length} Xtreams from Firebase`);
+      }
+    }
+    
+    // Sync Apps
+    const appsResult = await firebaseManager.getAllApps();
+    if (appsResult.success) {
+      const firebaseApps = appsResult.apps.map(a => ({...a, id: parseInt(a.id)}));
+      const localIds = iptvAppsManager.apps.map(a => a.id);
+      const newApps = firebaseApps.filter(a => !localIds.includes(a.id));
+      
+      if (newApps.length > 0) {
+        iptvAppsManager.apps = [...iptvAppsManager.apps, ...newApps];
+        await iptvAppsManager.saveToStorage();
+        console.log(`[Sync] Added ${newApps.length} Apps from Firebase`);
+      }
+    }
+    
+    // Sync Telegram
+    const telegramResult = await firebaseManager.getTelegramLinks();
+    if (telegramResult.success && telegramResult.links) {
+      telegramManager.links = telegramResult.links;
+      await telegramManager.saveToStorage();
+      console.log('[Sync] Telegram links updated');
+    }
+    
+    console.log('[Sync] ✅ Sync complete');
+    
+  } catch (error) {
+    console.error('[Sync] ❌ Error:', error);
+  }
+}
+
+// Run sync on page load
+window.addEventListener('load', async () => {
+  // Wait for Firebase
+  let attempts = 0;
+  while (!firebaseManager.isInitialized && attempts < 30) {
+    await new Promise(r => setTimeout(r, 100));
+    attempts++;
+  }
+  
+  if (firebaseManager.isInitialized) {
+    await syncFromFirebase();
+  }
+});
+
+// Auto sync every 30 seconds
+setInterval(() => {
+  if (firebaseManager.isInitialized) {
+    syncFromFirebase();
+  }
+}, 30000);
+
+console.log('✅ Firebase Sync Fix Loaded');

@@ -149,17 +149,13 @@ class FirebaseManager {
 
             // Enable offline persistence with multi-tab sync
             try {
-                if (this.db.enablePersistence) {
-                    await this.db.enablePersistence({ 
-                        synchronizeTabs: true
-                    });
-                    console.log('[Firebase] Offline persistence enabled with multi-tab sync');
-                }
+                await this.db.enablePersistence({ 
+                    synchronizeTabs: true
+                });
+                console.log('[Firebase] ✅ Multi-tab persistence enabled');
             } catch (err) {
                 if (err.code === 'failed-precondition') {
-                    console.warn('[Firebase] Persistence failed: Multiple tabs open');
-                } else if (err.code === 'unimplemented') {
-                    console.warn('[Firebase] Persistence not supported');
+                    console.warn('[Firebase] Persistence enabled in another tab');
                 } else {
                     console.warn('[Firebase] Persistence error:', err);
                 }
@@ -170,17 +166,20 @@ class FirebaseManager {
 
             // Setup network listeners
             this.setupNetworkListeners();
-
-            // Load offline queue
             this.loadOfflineQueue();
 
-            // Try auth (handles CSP errors)
-            await this.signInAnonymously();
+            // Try to sign in anonymously
+            const authResult = await this.signInAnonymously();
+
+            // Even if auth fails, we can still use Firestore if rules allow
+            if (!authResult) {
+                console.warn('[Firebase] Running without authentication - ensure Firestore rules allow unauthenticated access');
+            }
 
             this.isInitialized = true;
             this.syncEnabled = CONFIG.FIREBASE.SYNC.ENABLED;
 
-            console.log('[Firebase] Initialized successfully!');
+            console.log('[Firebase] ✅ Initialized successfully');
 
             // Setup listeners and load data
             this.setupRealtimeListeners();
@@ -190,7 +189,7 @@ class FirebaseManager {
             return true;
 
         } catch (error) {
-            console.error('[Firebase] Initialization error:', error);
+            console.error('[Firebase] ❌ Initialization error:', error);
             this.isInitialized = false;
             this.syncEnabled = false;
             return false;
@@ -201,29 +200,44 @@ class FirebaseManager {
         if (!this.auth) return null;
 
         try {
+            // Set persistence to LOCAL (works better with multi-tab)
             await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
+            // Sign in anonymously
             const result = await this.auth.signInAnonymously();
-            console.log('[Firebase] Signed in anonymously:', result.user.uid);
+            console.log('[Firebase] ✅ Signed in anonymously:', result.user.uid);
             this.authRetryCount = 0;
+
+            // Setup auth state listener for cross-tab sync
+            this.auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log('[Firebase] Auth state: signed in as', user.uid);
+                } else {
+                    console.log('[Firebase] Auth state: signed out');
+                }
+            });
+
             return result.user;
 
         } catch (error) {
+            // Handle CSP errors
             if (error.code === 'auth/operation-not-allowed') {
-                console.warn('[Firebase] Anonymous auth not enabled in Firebase Console');
+                console.error('[Firebase] ❌ Anonymous auth not enabled in Firebase Console!');
+                console.error('[Firebase] Please enable it at: https://console.firebase.google.com → Authentication → Sign-in method → Anonymous');
             } else if (error.message && (
                 error.message.includes('Content Security Policy') ||
-                error.message.includes('iframe') ||
-                error.message.includes('frame-ancestors')
+                error.message.includes('iframe')
             )) {
-                console.warn('[Firebase] Auth blocked by CSP - continuing without auth');
+                console.error('[Firebase] ❌ CSP blocked authentication. Please update your CSP headers.');
             } else {
                 console.error('[Firebase] Auth error:', error.code, error.message);
             }
 
+            // Retry logic
             if (this.authRetryCount < this.maxAuthRetries) {
                 this.authRetryCount++;
                 console.log(`[Firebase] Retrying auth (${this.authRetryCount}/${this.maxAuthRetries})...`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1500));
                 return this.signInAnonymously();
             }
 
@@ -233,11 +247,11 @@ class FirebaseManager {
 
     async loadInitialDataFromServer() {
         if (!this.isInitialized || !this.db) {
-            console.log('[Firebase] Cannot load initial data - not initialized');
+            console.log('[Firebase] Cannot load data - not initialized');
             return;
         }
 
-        console.log('[Firebase] Loading initial data from server...');
+        console.log('[Firebase] 🔄 Loading initial data from server...');
 
         const collections = [
             { name: CONFIG.FIREBASE.COLLECTIONS.USERS, key: 'users' },
@@ -254,26 +268,26 @@ class FirebaseManager {
 
                 if (!snapshot.empty) {
                     const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log(`[Firebase] Loaded ${docs.length} ${col.key} from server`);
+                    console.log(`[Firebase] ✅ Loaded ${docs.length} ${col.key}`);
                     this.updateLocalData(col.key, docs);
                 }
             } catch (err) {
-                console.error(`[Firebase] Error loading ${col.name}:`, err);
+                console.error(`[Firebase] ❌ Error loading ${col.name}:`, err);
             }
         }
 
         try {
             const telegramDoc = await this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TELEGRAM_LINKS).doc('main').get({ source: 'server' });
             if (telegramDoc.exists) {
-                console.log('[Firebase] Loaded telegram links from server');
+                console.log('[Firebase] ✅ Loaded telegram links');
                 this.updateLocalTelegramLinks(telegramDoc.data());
             }
         } catch (err) {
-            console.error('[Firebase] Error loading telegram links:', err);
+            console.error('[Firebase] ❌ Error loading telegram links:', err);
         }
 
         this.initialLoadComplete = true;
-        console.log('[Firebase] Initial data load complete');
+        console.log('[Firebase] ✅ Initial data load complete');
     }
 
     updateLocalData(type, remoteData) {
@@ -464,22 +478,30 @@ class FirebaseManager {
 
     setupRealtimeListeners() {
         if (!this.isInitialized || !this.db || this.listenersSetup) {
-            console.log('[Firebase] Listeners already setup or not initialized');
             return;
         }
 
         console.log('[Firebase] Setting up real-time listeners...');
 
         const setupListener = (collection, key, handler) => {
-            return this.db.collection(collection)
-                .onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
-                    if (!snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) {
-                        console.log(`[Firebase] ${key} collection updated`);
-                        handler(snapshot);
-                    }
-                }, (error) => {
-                    console.error(`[Firebase] ${key} listener error:`, error);
-                });
+            try {
+                return this.db.collection(collection)
+                    .onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+                        const hasServerChanges = snapshot.docChanges().some(change => 
+                            !change.doc.metadata.fromCache || change.doc.metadata.hasPendingWrites
+                        );
+
+                        if (hasServerChanges) {
+                            console.log(`[Firebase] ${key} updated from server`);
+                            handler(snapshot);
+                        }
+                    }, (error) => {
+                        console.error(`[Firebase] ${key} listener error:`, error);
+                    });
+            } catch (err) {
+                console.error(`[Firebase] Failed to setup ${key} listener:`, err);
+                return null;
+            }
         };
 
         this.unsubscribeUsers = setupListener(
@@ -512,43 +534,51 @@ class FirebaseManager {
             (snapshot) => this.handleCollectionChange('apps', snapshot)
         );
 
-        this.unsubscribeTelegram = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TELEGRAM_LINKS)
-            .doc('main')
-            .onSnapshot({ includeMetadataChanges: true }, (doc) => {
-                if (doc.exists && !doc.metadata.fromCache) {
-                    console.log('[Firebase] Telegram links updated');
-                    this.updateLocalTelegramLinks(doc.data());
-                }
-            }, (error) => {
-                console.error('[Firebase] Telegram listener error:', error);
-            });
+        try {
+            this.unsubscribeTelegram = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TELEGRAM_LINKS)
+                .doc('main')
+                .onSnapshot({ includeMetadataChanges: true }, (doc) => {
+                    if (doc.exists && (!doc.metadata.fromCache || doc.metadata.hasPendingWrites)) {
+                        console.log('[Firebase] Telegram links updated');
+                        this.updateLocalTelegramLinks(doc.data());
+                    }
+                }, (error) => {
+                    console.error('[Firebase] Telegram listener error:', error);
+                });
+        } catch (err) {
+            console.error('[Firebase] Failed to setup Telegram listener:', err);
+        }
 
         this.listenersSetup = true;
-        console.log('[Firebase] Real-time listeners setup complete');
+        console.log('[Firebase] ✅ Real-time listeners setup complete');
     }
 
     handleCollectionChange(type, snapshot) {
-        const docs = [];
-        snapshot.forEach((doc) => {
-            docs.push({ id: doc.id, ...doc.data() });
-        });
+        try {
+            const docs = [];
+            snapshot.forEach((doc) => {
+                docs.push({ id: doc.id, ...doc.data() });
+            });
 
-        if (docs.length > 0) {
-            this.updateLocalData(type, docs);
+            if (docs.length > 0) {
+                this.updateLocalData(type, docs);
+            }
+        } catch (error) {
+            console.error(`[Firebase] Error handling ${type} change:`, error);
         }
     }
 
     setupNetworkListeners() {
         window.addEventListener('online', async () => {
             this.isOnline = true;
-            console.log('[Firebase] Connection restored');
+            console.log('[Firebase] 🌐 Connection restored');
             await this.loadInitialDataFromServer();
             await this.processOfflineQueue();
         });
 
         window.addEventListener('offline', () => {
             this.isOnline = false;
-            console.log('[Firebase] Connection lost');
+            console.log('[Firebase] 📴 Connection lost');
         });
     }
 
@@ -558,6 +588,14 @@ class FirebaseManager {
                 this.processOfflineQueue();
             }
         }, CONFIG.FIREBASE.SYNC.SYNC_INTERVAL || 30000);
+
+        // Refresh data when tab becomes visible
+        document.addEventListener('visibilitychange', async () => {
+            if (!document.hidden && this.shouldSync()) {
+                console.log('[Firebase] Tab visible, refreshing data...');
+                await this.loadInitialDataFromServer();
+            }
+        });
     }
 
     async ensureInitialized() {

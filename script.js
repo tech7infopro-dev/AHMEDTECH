@@ -171,6 +171,7 @@ class FirebaseManager {
             this.syncEnabled = CONFIG.FIREBASE.SYNC.ENABLED;
             
             console.log('[Firebase] ✅ Initialized successfully!');
+            this.setupRealtimeListeners();
             console.log('[Firebase] Sync enabled:', this.syncEnabled);
 
             // Process any queued operations
@@ -726,7 +727,257 @@ class FirebaseManager {
         }));
     }
 
-    getSyncStatus() {
+    
+    // ==========================================
+    // REAL-TIME SYNC LISTENERS - NEW
+    // ==========================================
+    setupRealtimeListeners() {
+        if (!this.isInitialized || !this.db) {
+            console.log('[Firebase] Cannot setup listeners - not initialized');
+            return;
+        }
+
+        console.log('[Firebase] Setting up real-time listeners...');
+
+        // Listen to users collection
+        this.unsubscribeUsers = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.USERS)
+            .onSnapshot((snapshot) => {
+                console.log('[Firebase] Users collection updated');
+                this.handleCollectionChange('users', snapshot);
+            }, (error) => {
+                console.error('[Firebase] Users listener error:', error);
+            });
+
+        // Listen to MACs collection
+        this.unsubscribeMACs = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_MACS)
+            .onSnapshot((snapshot) => {
+                console.log('[Firebase] MACs collection updated');
+                this.handleCollectionChange('macs', snapshot);
+            }, (error) => {
+                console.error('[Firebase] MACs listener error:', error);
+            });
+
+        // Listen to Xtreams collection
+        this.unsubscribeXtreams = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.FREE_XTREAMS)
+            .onSnapshot((snapshot) => {
+                console.log('[Firebase] Xtreams collection updated');
+                this.handleCollectionChange('xtreams', snapshot);
+            }, (error) => {
+                console.error('[Firebase] Xtreams listener error:', error);
+            });
+
+        // Listen to tickets collection
+        this.unsubscribeTickets = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TICKETS)
+            .onSnapshot((snapshot) => {
+                console.log('[Firebase] Tickets collection updated');
+                this.handleCollectionChange('tickets', snapshot);
+            }, (error) => {
+                console.error('[Firebase] Tickets listener error:', error);
+            });
+
+        // Listen to apps collection
+        this.unsubscribeApps = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.IPTV_APPS)
+            .onSnapshot((snapshot) => {
+                console.log('[Firebase] Apps collection updated');
+                this.handleCollectionChange('apps', snapshot);
+            }, (error) => {
+                console.error('[Firebase] Apps listener error:', error);
+            });
+
+        // Listen to telegram links document
+        this.unsubscribeTelegram = this.db.collection(CONFIG.FIREBASE.COLLECTIONS.TELEGRAM_LINKS)
+            .doc('main')
+            .onSnapshot((doc) => {
+                console.log('[Firebase] Telegram links updated');
+                if (doc.exists) {
+                    window.dispatchEvent(new CustomEvent('firebase-telegram-sync', {
+                        detail: { data: doc.data() }
+                    }));
+                }
+            }, (error) => {
+                console.error('[Firebase] Telegram listener error:', error);
+            });
+
+        console.log('[Firebase] ✅ Real-time listeners setup complete');
+    }
+
+    handleCollectionChange(type, snapshot) {
+        const changes = [];
+        snapshot.docChanges().forEach((change) => {
+            changes.push({
+                type: change.type,
+                id: change.doc.id,
+                data: change.doc.data()
+            });
+        });
+
+        if (changes.length > 0) {
+            console.log(`[Firebase] ${type} changes:`, changes.length);
+
+            window.dispatchEvent(new CustomEvent('firebase-collection-sync', {
+                detail: { 
+                    collection: type,
+                    changes: changes,
+                    timestamp: Date.now()
+                }
+            }));
+
+            this.updateLocalData(type, snapshot);
+        }
+    }
+
+    updateLocalData(type, snapshot) {
+        try {
+            const docs = [];
+            snapshot.forEach((doc) => {
+                docs.push({ id: doc.id, ...doc.data() });
+            });
+
+            switch(type) {
+                case 'users':
+                    if (typeof userManager !== 'undefined') {
+                        const localUsers = userManager.users || [];
+                        const remoteUsers = docs.map(d => ({
+                            id: parseInt(d.id) || d.id,
+                            name: d.name,
+                            username: d.username,
+                            role: d.role,
+                            created: d.created,
+                            banned: d.banned || false,
+                            lastLogin: d.lastLogin,
+                            loginAttempts: d.loginAttempts || 0,
+                            lockedUntil: d.lockedUntil,
+                            passwordHash: localUsers.find(u => u.id == d.id)?.passwordHash,
+                            salt: localUsers.find(u => u.id == d.id)?.salt
+                        }));
+
+                        if (JSON.stringify(localUsers) !== JSON.stringify(remoteUsers)) {
+                            console.log('[Firebase] Updating local users data');
+                            userManager.users = remoteUsers;
+                            securityManager.secureStore(CONFIG.STORAGE_KEYS.USERS, remoteUsers);
+
+                            if (document.getElementById('user-management-section').style.display !== 'none') {
+                                updateUsersTable();
+                            }
+                        }
+                    }
+                    break;
+
+                case 'macs':
+                    if (typeof macManager !== 'undefined') {
+                        const remoteMACs = docs.map(d => ({
+                            id: parseInt(d.id) || d.id,
+                            url: d.url,
+                            macAddress: d.macAddress,
+                            expiryDate: d.expiryDate,
+                            created: d.created,
+                            createdBy: d.createdBy
+                        }));
+
+                        if (JSON.stringify(macManager.macs) !== JSON.stringify(remoteMACs)) {
+                            console.log('[Firebase] Updating local MACs data');
+                            macManager.macs = remoteMACs;
+                            securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_MACS, remoteMACs);
+
+                            if (document.getElementById('free-mac-section').style.display !== 'none') {
+                                updateFreeMACCards();
+                            }
+                        }
+                    }
+                    break;
+
+                case 'xtreams':
+                    if (typeof xtreamManager !== 'undefined') {
+                        const remoteXtreams = docs.map(d => ({
+                            id: parseInt(d.id) || d.id,
+                            url: d.url,
+                            username: d.username,
+                            password: d.password,
+                            expiryDate: d.expiryDate,
+                            created: d.created,
+                            createdBy: d.createdBy
+                        }));
+
+                        if (JSON.stringify(xtreamManager.xtreams) !== JSON.stringify(remoteXtreams)) {
+                            console.log('[Firebase] Updating local Xtreams data');
+                            xtreamManager.xtreams = remoteXtreams;
+                            securityManager.secureStore(CONFIG.STORAGE_KEYS.FREE_XTREAMS, remoteXtreams);
+
+                            if (document.getElementById('free-xtream-section').style.display !== 'none') {
+                                updateFreeXtreamCards();
+                            }
+                        }
+                    }
+                    break;
+
+                case 'tickets':
+                    if (typeof ticketManager !== 'undefined') {
+                        const remoteTickets = docs.map(d => ({
+                            id: parseInt(d.id) || d.id,
+                            subject: d.subject,
+                            category: d.category,
+                            priority: d.priority,
+                            description: d.description,
+                            status: d.status,
+                            createdBy: d.createdBy,
+                            createdAt: d.createdAt,
+                            updatedAt: d.updatedAt,
+                            messages: d.messages || []
+                        }));
+
+                        if (JSON.stringify(ticketManager.tickets) !== JSON.stringify(remoteTickets)) {
+                            console.log('[Firebase] Updating local tickets data');
+                            ticketManager.tickets = remoteTickets;
+                            securityManager.secureStore(CONFIG.STORAGE_KEYS.TICKETS, remoteTickets);
+
+                            if (document.getElementById('ticket-section').style.display !== 'none' ||
+                                document.getElementById('ticket-detail-section').style.display !== 'none') {
+                                updateTicketsList();
+                            }
+                        }
+                    }
+                    break;
+
+                case 'apps':
+                    if (typeof iptvAppsManager !== 'undefined') {
+                        const remoteApps = docs.map(d => ({
+                            id: parseInt(d.id) || d.id,
+                            name: d.name,
+                            downloadUrl: d.downloadUrl,
+                            created: d.created,
+                            createdBy: d.createdBy,
+                            updated: d.updated
+                        }));
+
+                        if (JSON.stringify(iptvAppsManager.apps) !== JSON.stringify(remoteApps)) {
+                            console.log('[Firebase] Updating local apps data');
+                            iptvAppsManager.apps = remoteApps;
+                            securityManager.secureStore(CONFIG.STORAGE_KEYS.IPTV_APPS, remoteApps);
+
+                            if (document.getElementById('iptv-apps-section').style.display !== 'none') {
+                                updateIPTVAppsCards();
+                            }
+                        }
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('[Firebase] Error updating local data:', error);
+        }
+    }
+
+    stopRealtimeListeners() {
+        console.log('[Firebase] Stopping real-time listeners...');
+        if (this.unsubscribeUsers) this.unsubscribeUsers();
+        if (this.unsubscribeMACs) this.unsubscribeMACs();
+        if (this.unsubscribeXtreams) this.unsubscribeXtreams();
+        if (this.unsubscribeTickets) this.unsubscribeTickets();
+        if (this.unsubscribeApps) this.unsubscribeApps();
+        if (this.unsubscribeTelegram) this.unsubscribeTelegram();
+        console.log('[Firebase] Listeners stopped');
+    }
+
+getSyncStatus() {
         return {
             isInitialized: this.isInitialized,
             isOnline: this.isOnline,
@@ -4942,23 +5193,33 @@ function openDeleteXtreamModal(xtreamId) {
     document.getElementById('deleteXtreamModal').dataset.xtreamId = xtreamId;
 }
 
-function banUser(userId) {
-    const result = userManager.banUser(userId);
-    if (result.success) {
-        notificationSystem.success('User Banned', `User "${result.user.username}" has been banned`, 3);
-        updateUsersTable();
-    } else {
-        notificationSystem.error('Error', result.message, 3);
+async function banUser(userId) {
+    try {
+        const result = await userManager.banUser(userId);
+        if (result.success) {
+            notificationSystem.success('User Banned', `User "${result.user.username}" has been banned`, 3);
+            updateUsersTable();
+        } else {
+            notificationSystem.error('Error', result.message, 3);
+        }
+    } catch (error) {
+        console.error('Ban user error:', error);
+        notificationSystem.error('Error', 'Failed to ban user: ' + (error.message || 'Unknown error'), 3);
     }
 }
 
-function unbanUser(userId) {
-    const result = userManager.unbanUser(userId);
-    if (result.success) {
-        notificationSystem.success('User Unbanned', `User "${result.user.username}" has been unbanned`, 3);
-        updateUsersTable();
-    } else {
-        notificationSystem.error('Error', result.message, 3);
+async function unbanUser(userId) {
+    try {
+        const result = await userManager.unbanUser(userId);
+        if (result.success) {
+            notificationSystem.success('User Unbanned', `User "${result.user.username}" has been unbanned`, 3);
+            updateUsersTable();
+        } else {
+            notificationSystem.error('Error', result.message, 3);
+        }
+    } catch (error) {
+        console.error('Unban user error:', error);
+        notificationSystem.error('Error', 'Failed to unban user: ' + (error.message || 'Unknown error'), 3);
     }
 }
 
@@ -5329,17 +5590,22 @@ document.getElementById('deleteModalCancel').addEventListener('click', function(
     document.getElementById('deleteUserModal').classList.remove('active');
 });
 
-document.getElementById('deleteModalConfirm').addEventListener('click', function() {
+document.getElementById('deleteModalConfirm').addEventListener('click', async function() {
     const userId = parseInt(document.getElementById('deleteUserModal').dataset.userId);
 
-    const result = userManager.deleteUser(userId);
+    try {
+        const result = await userManager.deleteUser(userId);
 
-    if (result.success) {
-        notificationSystem.success('Success', 'User deleted successfully', 3);
-        document.getElementById('deleteUserModal').classList.remove('active');
-        updateUsersTable();
-    } else {
-        notificationSystem.error('Error', result.message, 3);
+        if (result.success) {
+            notificationSystem.success('Success', 'User deleted successfully', 3);
+            document.getElementById('deleteUserModal').classList.remove('active');
+            updateUsersTable();
+        } else {
+            notificationSystem.error('Error', result.message, 3);
+        }
+    } catch (error) {
+        console.error('Delete user error:', error);
+        notificationSystem.error('Error', 'Failed to delete user: ' + (error.message || 'Unknown error'), 3);
     }
 });
 
@@ -6027,154 +6293,3 @@ setTimeout(() => {
 }, 2000);
 
 console.log('✅ AHMEDTECH DZ IPTV System Loaded Successfully');
-// ============================================
-// FIREBASE SYNC FIX - Add at end of script.js
-// ============================================
-
-// Override delete functions to sync with Firebase
-const originalDeleteUser = userManager.deleteUser.bind(userManager);
-userManager.deleteUser = async function(userId) {
-  const result = await originalDeleteUser(userId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteUser(userId);
-    console.log('[Sync] User deleted from Firebase:', userId);
-  }
-  return result;
-};
-
-const originalDeleteMAC = macManager.deleteMAC.bind(macManager);
-macManager.deleteMAC = async function(macId) {
-  const result = await originalDeleteMAC(macId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteMAC(macId);
-    console.log('[Sync] MAC deleted from Firebase:', macId);
-  }
-  return result;
-};
-
-const originalDeleteXtream = xtreamManager.deleteXtream.bind(xtreamManager);
-xtreamManager.deleteXtream = async function(xtreamId) {
-  const result = await originalDeleteXtream(xtreamId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteXtream(xtreamId);
-    console.log('[Sync] Xtream deleted from Firebase:', xtreamId);
-  }
-  return result;
-};
-
-const originalDeleteApp = iptvAppsManager.deleteApp.bind(iptvAppsManager);
-iptvAppsManager.deleteApp = async function(appId) {
-  const result = await originalDeleteApp(appId);
-  if (result.success && firebaseManager.isInitialized) {
-    await firebaseManager.deleteApp(appId);
-    console.log('[Sync] App deleted from Firebase:', appId);
-  }
-  return result;
-};
-
-// ============================================
-// AUTO SYNC FROM FIREBASE ON LOAD
-// ============================================
-
-async function syncFromFirebase() {
-  console.log('[Sync] Starting Firebase sync...');
-  
-  if (!firebaseManager.isInitialized) {
-    console.warn('[Sync] Firebase not initialized');
-    return;
-  }
-  
-  try {
-    // Sync Users
-    const usersResult = await firebaseManager.getAllUsers();
-    if (usersResult.success) {
-      const firebaseUsers = usersResult.users.map(u => ({...u, id: parseInt(u.id)}));
-      const localIds = userManager.users.map(u => u.id);
-      const newUsers = firebaseUsers.filter(u => !localIds.includes(u.id));
-      
-      if (newUsers.length > 0) {
-        userManager.users = [...userManager.users, ...newUsers];
-        await userManager.saveToStorage();
-        console.log(`[Sync] Added ${newUsers.length} users from Firebase`);
-      }
-    }
-    
-    // Sync MACs
-    const macsResult = await firebaseManager.getAllMACs();
-    if (macsResult.success) {
-      const firebaseMacs = macsResult.macs.map(m => ({...m, id: parseInt(m.id)}));
-      const localIds = macManager.macs.map(m => m.id);
-      const newMacs = firebaseMacs.filter(m => !localIds.includes(m.id));
-      
-      if (newMacs.length > 0) {
-        macManager.macs = [...macManager.macs, ...newMacs];
-        await macManager.saveToStorage();
-        console.log(`[Sync] Added ${newMacs.length} MACs from Firebase`);
-      }
-    }
-    
-    // Sync Xtreams
-    const xtreamsResult = await firebaseManager.getAllXtreams();
-    if (xtreamsResult.success) {
-      const firebaseXtreams = xtreamsResult.xtreams.map(x => ({...x, id: parseInt(x.id)}));
-      const localIds = xtreamManager.xtreams.map(x => x.id);
-      const newXtreams = firebaseXtreams.filter(x => !localIds.includes(x.id));
-      
-      if (newXtreams.length > 0) {
-        xtreamManager.xtreams = [...xtreamManager.xtreams, ...newXtreams];
-        await xtreamManager.saveToStorage();
-        console.log(`[Sync] Added ${newXtreams.length} Xtreams from Firebase`);
-      }
-    }
-    
-    // Sync Apps
-    const appsResult = await firebaseManager.getAllApps();
-    if (appsResult.success) {
-      const firebaseApps = appsResult.apps.map(a => ({...a, id: parseInt(a.id)}));
-      const localIds = iptvAppsManager.apps.map(a => a.id);
-      const newApps = firebaseApps.filter(a => !localIds.includes(a.id));
-      
-      if (newApps.length > 0) {
-        iptvAppsManager.apps = [...iptvAppsManager.apps, ...newApps];
-        await iptvAppsManager.saveToStorage();
-        console.log(`[Sync] Added ${newApps.length} Apps from Firebase`);
-      }
-    }
-    
-    // Sync Telegram
-    const telegramResult = await firebaseManager.getTelegramLinks();
-    if (telegramResult.success && telegramResult.links) {
-      telegramManager.links = telegramResult.links;
-      await telegramManager.saveToStorage();
-      console.log('[Sync] Telegram links updated');
-    }
-    
-    console.log('[Sync] ✅ Sync complete');
-    
-  } catch (error) {
-    console.error('[Sync] ❌ Error:', error);
-  }
-}
-
-// Run sync on page load
-window.addEventListener('load', async () => {
-  // Wait for Firebase
-  let attempts = 0;
-  while (!firebaseManager.isInitialized && attempts < 30) {
-    await new Promise(r => setTimeout(r, 100));
-    attempts++;
-  }
-  
-  if (firebaseManager.isInitialized) {
-    await syncFromFirebase();
-  }
-});
-
-// Auto sync every 30 seconds
-setInterval(() => {
-  if (firebaseManager.isInitialized) {
-    syncFromFirebase();
-  }
-}, 30000);
-
-console.log('✅ Firebase Sync Fix Loaded');

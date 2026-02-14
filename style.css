@@ -3186,3 +3186,46 @@
                 display: none !important;
             }
         }
+/* ============================================
+   SYNC STATUS STYLES - NEW
+   ============================================ */
+
+.sync-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+}
+
+.status-dot.online {
+    background: #4CAF50;
+    box-shadow: 0 0 5px #4CAF50;
+}
+
+.status-dot.offline {
+    background: #f44336;
+}
+
+.status-dot.syncing {
+    background: #ff9800;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.sync-card .system-card-actions {
+    flex-direction: column;
+    align-items: flex-start;
+}

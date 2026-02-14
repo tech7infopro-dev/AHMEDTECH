@@ -694,7 +694,27 @@
                             </div>
                         </div>
                     </div>
-                    
+                                        <!-- Firebase Sync Card -->
+                    <div class="system-card sync-card" id="sync-card">
+                        <div class="system-card-icon">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <div class="system-card-content">
+                            <h3 class="system-card-title">Firebase Sync</h3>
+                            <p class="system-card-desc">Manual sync control and status</p>
+                        </div>
+                        <div class="system-card-actions">
+                            <button class="system-card-btn" id="manual-sync-btn">
+                                <i class="fas fa-sync"></i>
+                                Sync Now
+                            </button>
+                            <div class="sync-status" id="sync-status">
+                                <span class="status-dot" id="sync-status-dot"></span>
+                                <span id="sync-status-text">Checking...</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- User Statistics Card -->
                     <div class="system-card statistics-card" id="statistics-card">
                         <div class="system-card-icon">
@@ -1181,6 +1201,5 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="config.js"></script>
     <script src="script.js"></script>
-    <script src="ULTIMATE_SYNC_V10.js"></script>
 </body>
 </html>

@@ -99,7 +99,6 @@ class FirebaseManager {
     constructor() {
         this.app = null;
         this.db = null;
-        this.auth = null;
         this.isInitialized = false;
         this.syncListeners = new Map();
         this.offlineQueue = [];
@@ -108,15 +107,16 @@ class FirebaseManager {
         this.initPromise = null;
         this.initialLoadComplete = false;
         this.listenersSetup = false;
-        this.authRetryCount = 0;
-        this.maxAuthRetries = 3;
+        this.initRetryCount = 0;
+        this.maxInitRetries = 5;
+        this.tabId = Math.random().toString(36).substr(2, 9);
 
         this.initPromise = this.init();
     }
 
     async init() {
         try {
-            console.log('[Firebase] Starting initialization...');
+            console.log('[Firebase] Starting initialization... Tab ID:', this.tabId);
 
             await envConfig.waitForEnv();
             const firebaseConfig = envConfig.loadFirebaseConfig();
@@ -124,11 +124,8 @@ class FirebaseManager {
             if (!envConfig.isValidConfig(firebaseConfig)) {
                 console.error('[Firebase] Invalid configuration');
                 this.isInitialized = false;
-                this.syncEnabled = false;
                 return false;
             }
-
-            console.log('[Firebase] Config valid, initializing...');
 
             if (typeof firebase === 'undefined') {
                 console.error('[Firebase] Firebase SDK not loaded!');
@@ -144,37 +141,26 @@ class FirebaseManager {
                 console.log('[Firebase] Using existing app');
             }
 
-            // Initialize Firestore FIRST
+            // Initialize Firestore
             this.db = firebase.firestore();
 
-            // Enable offline persistence with multi-tab sync
+            // CRITICAL: Enable multi-tab persistence
             try {
-                await this.db.enablePersistence({ 
+                await this.db.enablePersistence({
                     synchronizeTabs: true
                 });
                 console.log('[Firebase] ✅ Multi-tab persistence enabled');
             } catch (err) {
                 if (err.code === 'failed-precondition') {
-                    console.warn('[Firebase] Persistence enabled in another tab');
+                    console.log('[Firebase] Persistence already enabled in another tab');
                 } else {
                     console.warn('[Firebase] Persistence error:', err);
                 }
             }
 
-            // Initialize Auth
-            this.auth = firebase.auth();
-
             // Setup network listeners
             this.setupNetworkListeners();
             this.loadOfflineQueue();
-
-            // Try to sign in anonymously
-            const authResult = await this.signInAnonymously();
-
-            // Even if auth fails, we can still use Firestore if rules allow
-            if (!authResult) {
-                console.warn('[Firebase] Running without authentication - ensure Firestore rules allow unauthenticated access');
-            }
 
             this.isInitialized = true;
             this.syncEnabled = CONFIG.FIREBASE.SYNC.ENABLED;
@@ -189,59 +175,17 @@ class FirebaseManager {
             return true;
 
         } catch (error) {
-            console.error('[Firebase] ❌ Initialization error:', error);
+            console.error('[Firebase] Initialization error:', error);
+
+            if (this.initRetryCount < this.maxInitRetries) {
+                this.initRetryCount++;
+                console.log(`[Firebase] Retrying (${this.initRetryCount}/${this.maxInitRetries})...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                return this.init();
+            }
+
             this.isInitialized = false;
-            this.syncEnabled = false;
             return false;
-        }
-    }
-
-    async signInAnonymously() {
-        if (!this.auth) return null;
-
-        try {
-            // Set persistence to LOCAL (works better with multi-tab)
-            await this.auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
-            // Sign in anonymously
-            const result = await this.auth.signInAnonymously();
-            console.log('[Firebase] ✅ Signed in anonymously:', result.user.uid);
-            this.authRetryCount = 0;
-
-            // Setup auth state listener for cross-tab sync
-            this.auth.onAuthStateChanged((user) => {
-                if (user) {
-                    console.log('[Firebase] Auth state: signed in as', user.uid);
-                } else {
-                    console.log('[Firebase] Auth state: signed out');
-                }
-            });
-
-            return result.user;
-
-        } catch (error) {
-            // Handle CSP errors
-            if (error.code === 'auth/operation-not-allowed') {
-                console.error('[Firebase] ❌ Anonymous auth not enabled in Firebase Console!');
-                console.error('[Firebase] Please enable it at: https://console.firebase.google.com → Authentication → Sign-in method → Anonymous');
-            } else if (error.message && (
-                error.message.includes('Content Security Policy') ||
-                error.message.includes('iframe')
-            )) {
-                console.error('[Firebase] ❌ CSP blocked authentication. Please update your CSP headers.');
-            } else {
-                console.error('[Firebase] Auth error:', error.code, error.message);
-            }
-
-            // Retry logic
-            if (this.authRetryCount < this.maxAuthRetries) {
-                this.authRetryCount++;
-                console.log(`[Firebase] Retrying auth (${this.authRetryCount}/${this.maxAuthRetries})...`);
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                return this.signInAnonymously();
-            }
-
-            return null;
         }
     }
 
@@ -288,6 +232,9 @@ class FirebaseManager {
 
         this.initialLoadComplete = true;
         console.log('[Firebase] ✅ Initial data load complete');
+
+        // Dispatch event
+        window.dispatchEvent(new CustomEvent('firebase-ready'));
     }
 
     updateLocalData(type, remoteData) {
@@ -589,7 +536,6 @@ class FirebaseManager {
             }
         }, CONFIG.FIREBASE.SYNC.SYNC_INTERVAL || 30000);
 
-        // Refresh data when tab becomes visible
         document.addEventListener('visibilitychange', async () => {
             if (!document.hidden && this.shouldSync()) {
                 console.log('[Firebase] Tab visible, refreshing data...');
@@ -632,7 +578,8 @@ class FirebaseManager {
             await userRef.set({
                 ...safeUserData,
                 lastSync: firebase.firestore.FieldValue.serverTimestamp(),
-                syncDevice: navigator.userAgent
+                syncDevice: navigator.userAgent,
+                syncTab: this.tabId
             }, { merge: true });
 
             console.log('[Firebase] User synced:', userData.id);
@@ -675,7 +622,8 @@ class FirebaseManager {
                                  .doc(macData.id.toString());
             await macRef.set({
                 ...macData,
-                lastSync: firebase.firestore.FieldValue.serverTimestamp()
+                lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+                syncTab: this.tabId
             }, { merge: true });
             return { success: true };
         } catch (error) {
@@ -713,7 +661,8 @@ class FirebaseManager {
                                     .doc(xtreamData.id.toString());
             await xtreamRef.set({
                 ...xtreamData,
-                lastSync: firebase.firestore.FieldValue.serverTimestamp()
+                lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+                syncTab: this.tabId
             }, { merge: true });
             return { success: true };
         } catch (error) {
@@ -751,7 +700,8 @@ class FirebaseManager {
                                     .doc(ticketData.id.toString());
             await ticketRef.set({
                 ...ticketData,
-                lastSync: firebase.firestore.FieldValue.serverTimestamp()
+                lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+                syncTab: this.tabId
             }, { merge: true });
             return { success: true };
         } catch (error) {
@@ -789,7 +739,8 @@ class FirebaseManager {
                                 .doc(appData.id.toString());
             await appRef.set({
                 ...appData,
-                lastSync: firebase.firestore.FieldValue.serverTimestamp()
+                lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+                syncTab: this.tabId
             }, { merge: true });
             return { success: true };
         } catch (error) {
@@ -827,7 +778,8 @@ class FirebaseManager {
                                    .doc('main');
             await linksRef.set({
                 ...linksData,
-                lastSync: firebase.firestore.FieldValue.serverTimestamp()
+                lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+                syncTab: this.tabId
             }, { merge: true });
             return { success: true };
         } catch (error) {
@@ -919,7 +871,8 @@ class FirebaseManager {
             syncEnabled: this.syncEnabled,
             pendingOperations: this.offlineQueue.length,
             initialLoadComplete: this.initialLoadComplete,
-            listenersSetup: this.listenersSetup
+            listenersSetup: this.listenersSetup,
+            tabId: this.tabId
         };
     }
 }
